@@ -7,6 +7,9 @@ import { AuthProvider } from "./hooks/useAuth";
 import Landing from "./pages/Landing";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
+import UserManagement from "./pages/UserManagement";
+import Profile from "./pages/Profile";
+import DashboardLayout from "./components/DashboardLayout";
 import ProjectSchedule from "./pages/ProjectSchedule";
 import NotFound from "./pages/NotFound";
 
@@ -23,6 +26,8 @@ const App = () => (
             <Route path="/" element={<Landing />} />
             <Route path="/auth" element={<Auth />} />
             <Route path="/dashboard" element={<Dashboard />} />
+            <Route path="/users" element={<DashboardLayout><UserManagement /></DashboardLayout>} />
+            <Route path="/profile" element={<DashboardLayout><Profile /></DashboardLayout>} />
             <Route path="/schedule" element={<ProjectSchedule />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
