@@ -14,6 +14,41 @@ export type Database = {
   }
   public: {
     Tables: {
+      enrollments: {
+        Row: {
+          enrolled_at: string
+          id: string
+          program_id: string
+          status: string
+          trainee_id: string
+          updated_at: string
+        }
+        Insert: {
+          enrolled_at?: string
+          id?: string
+          program_id: string
+          status?: string
+          trainee_id: string
+          updated_at?: string
+        }
+        Update: {
+          enrolled_at?: string
+          id?: string
+          program_id?: string
+          status?: string
+          trainee_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "enrollments_program_id_fkey"
+            columns: ["program_id"]
+            isOneToOne: false
+            referencedRelation: "training_programs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -44,6 +79,45 @@ export type Database = {
           phone?: string | null
           updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      training_programs: {
+        Row: {
+          created_at: string
+          description: string | null
+          end_date: string | null
+          id: string
+          max_trainees: number | null
+          start_date: string | null
+          status: string
+          title: string
+          trainer_id: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          end_date?: string | null
+          id?: string
+          max_trainees?: number | null
+          start_date?: string | null
+          status?: string
+          title: string
+          trainer_id: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          end_date?: string | null
+          id?: string
+          max_trainees?: number | null
+          start_date?: string | null
+          status?: string
+          title?: string
+          trainer_id?: string
+          updated_at?: string
         }
         Relationships: []
       }
