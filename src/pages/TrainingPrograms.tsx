@@ -33,6 +33,7 @@ interface TrainingProgram {
   max_trainees: number | null;
   status: string;
   created_at: string;
+  trainer_name?: string | null;
 }
 
 interface Enrollment {
@@ -79,9 +80,24 @@ function TrainingProgramsContent() {
 
     if (error) {
       toast({ title: 'Error fetching programs', description: error.message, variant: 'destructive' });
-    } else {
-      setPrograms(data || []);
+      setLoading(false);
+      return;
     }
+
+    // Fetch trainer names from profiles
+    const trainerIds = [...new Set((data || []).map(p => p.trainer_id))];
+    let trainerMap: Record<string, string | null> = {};
+    if (trainerIds.length > 0) {
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('user_id, full_name')
+        .in('user_id', trainerIds);
+      if (profiles) {
+        trainerMap = Object.fromEntries(profiles.map(p => [p.user_id, p.full_name]));
+      }
+    }
+
+    setPrograms((data || []).map(p => ({ ...p, trainer_name: trainerMap[p.trainer_id] || null })));
     setLoading(false);
   };
 
@@ -332,6 +348,10 @@ function TrainingProgramsContent() {
               </CardHeader>
               <CardContent className="flex-1 flex flex-col justify-between gap-4">
                 <div className="space-y-2 text-sm text-muted-foreground">
+                  <div className="flex items-center gap-2">
+                    <BookOpen className="h-4 w-4" />
+                    <span>Trainer: {program.trainer_name || 'Unknown'}</span>
+                  </div>
                   {(program.start_date || program.end_date) && (
                     <div className="flex items-center gap-2">
                       <Calendar className="h-4 w-4" />
