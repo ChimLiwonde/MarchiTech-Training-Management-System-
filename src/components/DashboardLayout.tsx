@@ -77,6 +77,8 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       { title: 'User Management', url: '/users', icon: Users },
       { title: 'Training Programs', url: '/trainings', icon: BookOpen },
       { title: 'Schedule', url: '/schedule', icon: Calendar },
+      { title: 'Resources', url: '/resources', icon: FileText },
+      { title: 'Assessments', url: '/assessments', icon: ClipboardCheck },
       { title: 'Reports', url: '/reports', icon: BarChart3 },
     );
   } else if (role === 'trainer') {
