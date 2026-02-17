@@ -30,6 +30,8 @@ import {
   UserCheck,
   ClipboardList,
   Award,
+  FileText,
+  ClipboardCheck,
 } from 'lucide-react';
 
 interface NavItem {
@@ -82,12 +84,16 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       { title: 'My Trainings', url: '/trainings', icon: BookOpen },
       { title: 'Sessions', url: '/sessions', icon: Calendar },
       { title: 'Attendance', url: '/attendance', icon: ClipboardList },
+      { title: 'Resources', url: '/resources', icon: FileText },
+      { title: 'Assessments', url: '/assessments', icon: ClipboardCheck },
       { title: 'My Trainees', url: '/trainees', icon: UserCheck },
     );
   } else {
     roleNav.push(
       { title: 'Browse Trainings', url: '/trainings', icon: BookOpen },
       { title: 'My Schedule', url: '/schedule', icon: Calendar },
+      { title: 'Resources', url: '/resources', icon: FileText },
+      { title: 'Assessments', url: '/assessments', icon: ClipboardCheck },
       { title: 'Certificates', url: '/certificates', icon: Award },
     );
   }

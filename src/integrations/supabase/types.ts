@@ -14,6 +14,141 @@ export type Database = {
   }
   public: {
     Tables: {
+      assessment_attempts: {
+        Row: {
+          answers: Json
+          assessment_id: string
+          completed_at: string | null
+          created_at: string
+          id: string
+          passed: boolean | null
+          score: number | null
+          started_at: string
+          trainee_id: string
+        }
+        Insert: {
+          answers?: Json
+          assessment_id: string
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          passed?: boolean | null
+          score?: number | null
+          started_at?: string
+          trainee_id: string
+        }
+        Update: {
+          answers?: Json
+          assessment_id?: string
+          completed_at?: string | null
+          created_at?: string
+          id?: string
+          passed?: boolean | null
+          score?: number | null
+          started_at?: string
+          trainee_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "assessment_attempts_assessment_id_fkey"
+            columns: ["assessment_id"]
+            isOneToOne: false
+            referencedRelation: "assessments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      assessment_questions: {
+        Row: {
+          assessment_id: string
+          correct_answer: string
+          created_at: string
+          id: string
+          options: Json
+          points: number
+          question_text: string
+          question_type: string
+          sort_order: number
+        }
+        Insert: {
+          assessment_id: string
+          correct_answer: string
+          created_at?: string
+          id?: string
+          options?: Json
+          points?: number
+          question_text: string
+          question_type?: string
+          sort_order?: number
+        }
+        Update: {
+          assessment_id?: string
+          correct_answer?: string
+          created_at?: string
+          id?: string
+          options?: Json
+          points?: number
+          question_text?: string
+          question_type?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "assessment_questions_assessment_id_fkey"
+            columns: ["assessment_id"]
+            isOneToOne: false
+            referencedRelation: "assessments"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      assessments: {
+        Row: {
+          created_at: string
+          created_by: string
+          description: string | null
+          id: string
+          is_published: boolean
+          passing_score: number
+          program_id: string
+          time_limit_minutes: number | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by: string
+          description?: string | null
+          id?: string
+          is_published?: boolean
+          passing_score?: number
+          program_id: string
+          time_limit_minutes?: number | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string
+          description?: string | null
+          id?: string
+          is_published?: boolean
+          passing_score?: number
+          program_id?: string
+          time_limit_minutes?: number | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "assessments_program_id_fkey"
+            columns: ["program_id"]
+            isOneToOne: false
+            referencedRelation: "training_programs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       attendance: {
         Row: {
           checked_in_at: string | null
@@ -202,6 +337,53 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      training_resources: {
+        Row: {
+          created_at: string
+          description: string | null
+          external_url: string | null
+          file_type: string | null
+          file_url: string | null
+          id: string
+          program_id: string
+          title: string
+          updated_at: string
+          uploaded_by: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          external_url?: string | null
+          file_type?: string | null
+          file_url?: string | null
+          id?: string
+          program_id: string
+          title: string
+          updated_at?: string
+          uploaded_by: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          external_url?: string | null
+          file_type?: string | null
+          file_url?: string | null
+          id?: string
+          program_id?: string
+          title?: string
+          updated_at?: string
+          uploaded_by?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "training_resources_program_id_fkey"
+            columns: ["program_id"]
+            isOneToOne: false
+            referencedRelation: "training_programs"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_roles: {
         Row: {
