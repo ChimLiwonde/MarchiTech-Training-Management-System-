@@ -16,6 +16,8 @@ import Sessions from "./pages/Sessions";
 import Attendance from "./pages/Attendance";
 import Resources from "./pages/Resources";
 import Assessments from "./pages/Assessments";
+import Certificates from "./pages/Certificates";
+import Reports from "./pages/Reports";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -39,6 +41,8 @@ const App = () => (
             <Route path="/attendance" element={<Attendance />} />
             <Route path="/resources" element={<Resources />} />
             <Route path="/assessments" element={<Assessments />} />
+            <Route path="/certificates" element={<Certificates />} />
+            <Route path="/reports" element={<Reports />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
@@ -49,3 +53,4 @@ const App = () => (
 );
 
 export default App;
+
