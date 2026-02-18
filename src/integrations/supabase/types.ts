@@ -187,6 +187,45 @@ export type Database = {
           },
         ]
       }
+      certificates: {
+        Row: {
+          assessment_id: string | null
+          attempt_id: string | null
+          certificate_number: string
+          created_at: string
+          id: string
+          issued_at: string
+          issued_by: string
+          notes: string | null
+          program_id: string
+          trainee_id: string
+        }
+        Insert: {
+          assessment_id?: string | null
+          attempt_id?: string | null
+          certificate_number?: string
+          created_at?: string
+          id?: string
+          issued_at?: string
+          issued_by: string
+          notes?: string | null
+          program_id: string
+          trainee_id: string
+        }
+        Update: {
+          assessment_id?: string | null
+          attempt_id?: string | null
+          certificate_number?: string
+          created_at?: string
+          id?: string
+          issued_at?: string
+          issued_by?: string
+          notes?: string | null
+          program_id?: string
+          trainee_id?: string
+        }
+        Relationships: []
+      }
       enrollments: {
         Row: {
           enrolled_at: string

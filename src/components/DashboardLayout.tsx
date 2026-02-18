@@ -27,7 +27,6 @@ import {
   User,
   LogOut,
   Loader2,
-  UserCheck,
   ClipboardList,
   Award,
   FileText,
@@ -79,6 +78,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       { title: 'Schedule', url: '/schedule', icon: Calendar },
       { title: 'Resources', url: '/resources', icon: FileText },
       { title: 'Assessments', url: '/assessments', icon: ClipboardCheck },
+      { title: 'Certificates', url: '/certificates', icon: Award },
       { title: 'Reports', url: '/reports', icon: BarChart3 },
     );
   } else if (role === 'trainer') {
@@ -88,7 +88,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       { title: 'Attendance', url: '/attendance', icon: ClipboardList },
       { title: 'Resources', url: '/resources', icon: FileText },
       { title: 'Assessments', url: '/assessments', icon: ClipboardCheck },
-      { title: 'My Trainees', url: '/trainees', icon: UserCheck },
+      { title: 'Certificates', url: '/certificates', icon: Award },
     );
   } else {
     roleNav.push(
