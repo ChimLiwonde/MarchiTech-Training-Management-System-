@@ -19,6 +19,7 @@ import Assessments from "./pages/Assessments";
 import Certificates from "./pages/Certificates";
 import Reports from "./pages/Reports";
 import NotFound from "./pages/NotFound";
+import VerifyCertificate from "./pages/VerifyCertificate";
 
 const queryClient = new QueryClient();
 
@@ -32,6 +33,7 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Landing />} />
             <Route path="/auth" element={<Auth />} />
+            <Route path="/verify" element={<VerifyCertificate />} />
             <Route path="/dashboard" element={<Dashboard />} />
             <Route path="/users" element={<DashboardLayout><UserManagement /></DashboardLayout>} />
             <Route path="/profile" element={<DashboardLayout><Profile /></DashboardLayout>} />

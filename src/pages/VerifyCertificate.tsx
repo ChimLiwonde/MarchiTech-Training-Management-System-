@@ -1,0 +1,136 @@
+import { useState } from 'react';
+import { supabase } from '@/integrations/supabase/client';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { Award, Search, CheckCircle2, XCircle, ArrowLeft, Loader2, ShieldCheck } from 'lucide-react';
+import { format } from 'date-fns';
+import { Link } from 'react-router-dom';
+
+interface VerifiedCert {
+  certificate_number: string;
+  issued_at: string;
+  trainee_name: string;
+  program_title: string;
+}
+
+export default function VerifyCertificate() {
+  const [certNumber, setCertNumber] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<VerifiedCert | null>(null);
+  const [notFound, setNotFound] = useState(false);
+  const [searched, setSearched] = useState(false);
+
+  const handleVerify = async () => {
+    if (!certNumber.trim()) return;
+    setLoading(true);
+    setResult(null);
+    setNotFound(false);
+    setSearched(true);
+
+    // Use an edge function for public access (bypasses RLS)
+    const { data, error } = await supabase.functions.invoke('verify-certificate', {
+      body: { certificate_number: certNumber.trim().toUpperCase() },
+    });
+
+    if (error || !data?.found) {
+      setNotFound(true);
+    } else {
+      setResult(data.certificate);
+    }
+    setLoading(false);
+  };
+
+  return (
+    <div className="min-h-screen bg-background">
+      {/* Header */}
+      <header className="border-b border-border bg-card">
+        <div className="max-w-3xl mx-auto px-4 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="h-6 w-6 text-primary" />
+            <span className="font-bold text-foreground text-lg">Certificate Verification</span>
+          </div>
+          <Link to="/">
+            <Button variant="ghost" size="sm">
+              <ArrowLeft className="h-4 w-4 mr-1" />Back
+            </Button>
+          </Link>
+        </div>
+      </header>
+
+      <main className="max-w-xl mx-auto px-4 py-12">
+        <div className="text-center mb-8">
+          <Award className="h-14 w-14 text-accent mx-auto mb-4" />
+          <h1 className="text-2xl font-bold text-foreground mb-2">Verify a Certificate</h1>
+          <p className="text-muted-foreground">
+            Enter a certificate number to verify its authenticity.
+          </p>
+        </div>
+
+        <Card>
+          <CardContent className="pt-6">
+            <div className="flex gap-2">
+              <Input
+                placeholder="e.g. CERT-8A2B3C4D"
+                value={certNumber}
+                onChange={e => setCertNumber(e.target.value.toUpperCase())}
+                onKeyDown={e => e.key === 'Enter' && handleVerify()}
+                className="font-mono"
+              />
+              <Button onClick={handleVerify} disabled={loading || !certNumber.trim()}>
+                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        {searched && !loading && (
+          <div className="mt-6">
+            {result ? (
+              <Card className="border-2 border-green-500/30 bg-green-50/50 dark:bg-green-950/10">
+                <CardHeader className="pb-3">
+                  <div className="flex items-center gap-2">
+                    <CheckCircle2 className="h-6 w-6 text-green-600" />
+                    <CardTitle className="text-green-700 dark:text-green-400">Certificate Verified</CardTitle>
+                  </div>
+                  <CardDescription>This certificate is authentic and valid.</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex justify-between items-center py-2 border-b border-border">
+                    <span className="text-sm text-muted-foreground">Certificate Number</span>
+                    <Badge variant="outline" className="font-mono">{result.certificate_number}</Badge>
+                  </div>
+                  <div className="flex justify-between items-center py-2 border-b border-border">
+                    <span className="text-sm text-muted-foreground">Recipient</span>
+                    <span className="text-sm font-medium text-foreground">{result.trainee_name}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-2 border-b border-border">
+                    <span className="text-sm text-muted-foreground">Program</span>
+                    <span className="text-sm font-medium text-foreground">{result.program_title}</span>
+                  </div>
+                  <div className="flex justify-between items-center py-2">
+                    <span className="text-sm text-muted-foreground">Issued Date</span>
+                    <span className="text-sm font-medium text-foreground">
+                      {format(new Date(result.issued_at), 'MMMM d, yyyy')}
+                    </span>
+                  </div>
+                </CardContent>
+              </Card>
+            ) : notFound ? (
+              <Card className="border-2 border-destructive/30 bg-red-50/50 dark:bg-red-950/10">
+                <CardContent className="py-8 text-center">
+                  <XCircle className="h-10 w-10 text-destructive mx-auto mb-3" />
+                  <p className="font-semibold text-destructive">Certificate Not Found</p>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    No certificate exists with the number "{certNumber}". Please check and try again.
+                  </p>
+                </CardContent>
+              </Card>
+            ) : null}
+          </div>
+        )}
+      </main>
+    </div>
+  );
+}
