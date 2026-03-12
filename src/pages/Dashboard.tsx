@@ -35,6 +35,7 @@ import {
   Legend,
 } from 'recharts';
 import { format, parseISO, isAfter, isBefore, addDays } from 'date-fns';
+import WelcomeTour from '@/components/WelcomeTour';
 
 interface AttendanceStat {
   programTitle: string;
