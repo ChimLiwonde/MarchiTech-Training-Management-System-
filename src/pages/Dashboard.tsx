@@ -515,7 +515,7 @@ function DashboardContent() {
       </div>
 
       {/* Charts Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div id="tour-charts" className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Enrollment Bar Chart */}
         <Card>
           <CardHeader className="pb-2">
