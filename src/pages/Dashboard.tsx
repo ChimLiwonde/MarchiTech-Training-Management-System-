@@ -18,6 +18,8 @@ import {
   TrendingUp,
   FileCheck,
   UserPlus,
+  CheckCircle2,
+  Target,
 } from 'lucide-react';
 import {
   BarChart,
@@ -39,6 +41,15 @@ interface AttendanceStat {
   totalRecords: number;
   presentCount: number;
   rate: number;
+}
+
+interface ProgramProgress {
+  programId: string;
+  programTitle: string;
+  totalAssessments: number;
+  passedAssessments: number;
+  hasCertificate: boolean;
+  percentage: number;
 }
 
 interface QuickStat {
@@ -82,6 +93,7 @@ function DashboardContent() {
   const [upcomingSessions, setUpcomingSessions] = useState<UpcomingSession[]>([]);
   const [enrollmentChart, setEnrollmentChart] = useState<{ name: string; count: number }[]>([]);
   const [passRateChart, setPassRateChart] = useState<{ name: string; value: number }[]>([]);
+  const [programProgress, setProgramProgress] = useState<ProgramProgress[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -92,6 +104,7 @@ function DashboardContent() {
         fetchRecentActivity(),
         fetchUpcomingSessions(),
         fetchChartData(),
+        fetchProgramProgress(),
       ]).finally(() => setLoading(false));
     }
   }, [user, role]);
@@ -345,6 +358,113 @@ function DashboardContent() {
     } catch { /* silent */ }
   };
 
+  const fetchProgramProgress = async () => {
+    if (!user) return;
+    try {
+      if (role === 'trainee') {
+        const { data: enrollments } = await supabase
+          .from('enrollments')
+          .select('program_id')
+          .eq('trainee_id', user.id)
+          .eq('status', 'approved');
+        if (!enrollments?.length) { setProgramProgress([]); return; }
+
+        const progIds = enrollments.map(e => e.program_id);
+        const [{ data: programs }, { data: assessments }, { data: attempts }, { data: certs }] = await Promise.all([
+          supabase.from('training_programs').select('id, title').in('id', progIds),
+          supabase.from('assessments').select('id, program_id').in('program_id', progIds).eq('is_published', true),
+          supabase.from('assessment_attempts').select('assessment_id, passed').eq('trainee_id', user.id).eq('passed', true),
+          supabase.from('certificates').select('program_id').eq('trainee_id', user.id),
+        ]);
+
+        const titleMap: Record<string, string> = {};
+        (programs || []).forEach(p => { titleMap[p.id] = p.title; });
+        const passedSet = new Set((attempts || []).map(a => a.assessment_id));
+        const certProgSet = new Set((certs || []).map(c => c.program_id));
+
+        const progAssessments: Record<string, string[]> = {};
+        (assessments || []).forEach(a => {
+          if (!progAssessments[a.program_id]) progAssessments[a.program_id] = [];
+          progAssessments[a.program_id].push(a.id);
+        });
+
+        const progress: ProgramProgress[] = progIds.map(pid => {
+          const total = progAssessments[pid]?.length || 0;
+          const passed = total > 0 ? progAssessments[pid].filter(aid => passedSet.has(aid)).length : 0;
+          return {
+            programId: pid,
+            programTitle: titleMap[pid] || 'Unknown',
+            totalAssessments: total,
+            passedAssessments: passed,
+            hasCertificate: certProgSet.has(pid),
+            percentage: total > 0 ? Math.round((passed / total) * 100) : 0,
+          };
+        });
+        setProgramProgress(progress);
+      } else {
+        const { data: programs } = await supabase.from('training_programs').select('id, title');
+        if (!programs?.length) { setProgramProgress([]); return; }
+
+        const progIds = programs.map(p => p.id);
+        const [{ data: assessments }, { data: enrollments }, { data: attempts }, { data: certs }] = await Promise.all([
+          supabase.from('assessments').select('id, program_id').in('program_id', progIds).eq('is_published', true),
+          supabase.from('enrollments').select('program_id, trainee_id').in('program_id', progIds).eq('status', 'approved'),
+          supabase.from('assessment_attempts').select('assessment_id, trainee_id, passed').eq('passed', true),
+          supabase.from('certificates').select('program_id'),
+        ]);
+
+        const titleMap: Record<string, string> = {};
+        programs.forEach(p => { titleMap[p.id] = p.title; });
+
+        const progAssessments: Record<string, string[]> = {};
+        (assessments || []).forEach(a => {
+          if (!progAssessments[a.program_id]) progAssessments[a.program_id] = [];
+          progAssessments[a.program_id].push(a.id);
+        });
+
+        const progTrainees: Record<string, string[]> = {};
+        (enrollments || []).forEach(e => {
+          if (!progTrainees[e.program_id]) progTrainees[e.program_id] = [];
+          progTrainees[e.program_id].push(e.trainee_id);
+        });
+
+        const passedMap: Record<string, Set<string>> = {};
+        (attempts || []).forEach(a => {
+          if (!passedMap[a.trainee_id]) passedMap[a.trainee_id] = new Set();
+          passedMap[a.trainee_id].add(a.assessment_id);
+        });
+
+        const certCounts: Record<string, number> = {};
+        (certs || []).forEach(c => { certCounts[c.program_id] = (certCounts[c.program_id] || 0) + 1; });
+
+        const progress: ProgramProgress[] = progIds
+          .filter(pid => (progTrainees[pid]?.length || 0) > 0)
+          .map(pid => {
+            const total = progAssessments[pid]?.length || 0;
+            const trainees = progTrainees[pid] || [];
+            let avgPassed = 0;
+            if (total > 0 && trainees.length > 0) {
+              const sum = trainees.reduce((acc, tid) => {
+                const passed = progAssessments[pid].filter(aid => passedMap[tid]?.has(aid)).length;
+                return acc + passed;
+              }, 0);
+              avgPassed = Math.round(sum / trainees.length);
+            }
+            return {
+              programId: pid,
+              programTitle: titleMap[pid] || 'Unknown',
+              totalAssessments: total,
+              passedAssessments: avgPassed,
+              hasCertificate: (certCounts[pid] || 0) > 0,
+              percentage: total > 0 ? Math.round((avgPassed / total) * 100) : 0,
+            };
+          })
+          .sort((a, b) => b.percentage - a.percentage);
+        setProgramProgress(progress);
+      }
+    } catch { /* silent */ }
+  };
+
   const activityColor = (type: ActivityItem['type']) => {
     switch (type) {
       case 'enrollment': return 'bg-primary/10 text-primary';
@@ -549,6 +669,48 @@ function DashboardContent() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Program Progress Tracker */}
+      {programProgress.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Target className="h-5 w-5" />
+              {role === 'trainee' ? 'My Program Progress' : 'Program Completion Overview'}
+            </CardTitle>
+            <CardDescription>
+              {role === 'trainee'
+                ? 'Your assessment completion across enrolled programs.'
+                : 'Average trainee assessment completion per program.'}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-5">
+              {programProgress.map((prog) => (
+                <div key={prog.programId} className="space-y-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="font-medium truncate">{prog.programTitle}</span>
+                      {prog.hasCertificate && (
+                        <Badge variant="secondary" className="shrink-0 gap-1 text-xs">
+                          <CheckCircle2 className="w-3 h-3" />
+                          {role === 'trainee' ? 'Certified' : 'Certs Issued'}
+                        </Badge>
+                      )}
+                    </div>
+                    <span className="text-muted-foreground shrink-0 ml-4">
+                      {role === 'trainee'
+                        ? `${prog.passedAssessments}/${prog.totalAssessments} assessments`
+                        : `${prog.percentage}% avg completion`}
+                    </span>
+                  </div>
+                  <Progress value={prog.percentage} className="h-2.5" />
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Attendance Summary */}
       <Card>
