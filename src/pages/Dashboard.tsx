@@ -670,6 +670,48 @@ function DashboardContent() {
         </Card>
       </div>
 
+      {/* Program Progress Tracker */}
+      {programProgress.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Target className="h-5 w-5" />
+              {role === 'trainee' ? 'My Program Progress' : 'Program Completion Overview'}
+            </CardTitle>
+            <CardDescription>
+              {role === 'trainee'
+                ? 'Your assessment completion across enrolled programs.'
+                : 'Average trainee assessment completion per program.'}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-5">
+              {programProgress.map((prog) => (
+                <div key={prog.programId} className="space-y-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="font-medium truncate">{prog.programTitle}</span>
+                      {prog.hasCertificate && (
+                        <Badge variant="secondary" className="shrink-0 gap-1 text-xs">
+                          <CheckCircle2 className="w-3 h-3" />
+                          {role === 'trainee' ? 'Certified' : 'Certs Issued'}
+                        </Badge>
+                      )}
+                    </div>
+                    <span className="text-muted-foreground shrink-0 ml-4">
+                      {role === 'trainee'
+                        ? `${prog.passedAssessments}/${prog.totalAssessments} assessments`
+                        : `${prog.percentage}% avg completion`}
+                    </span>
+                  </div>
+                  <Progress value={prog.percentage} className="h-2.5" />
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Attendance Summary */}
       <Card>
         <CardHeader>
