@@ -18,6 +18,8 @@ import {
   TrendingUp,
   FileCheck,
   UserPlus,
+  CheckCircle2,
+  Target,
 } from 'lucide-react';
 import {
   BarChart,
