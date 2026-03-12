@@ -35,6 +35,7 @@ import {
   Legend,
 } from 'recharts';
 import { format, parseISO, isAfter, isBefore, addDays } from 'date-fns';
+import WelcomeTour from '@/components/WelcomeTour';
 
 interface AttendanceStat {
   programTitle: string;
@@ -493,8 +494,11 @@ function DashboardContent() {
         </p>
       </div>
 
+      {/* Welcome Tour */}
+      <WelcomeTour />
+
       {/* Quick Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div id="tour-quick-stats" className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {quickStats.map((stat, i) => (
           <Card key={i} className="overflow-hidden">
             <CardContent className="p-4 flex items-center gap-4">
@@ -511,7 +515,7 @@ function DashboardContent() {
       </div>
 
       {/* Charts Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div id="tour-charts" className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Enrollment Bar Chart */}
         <Card>
           <CardHeader className="pb-2">
@@ -587,7 +591,7 @@ function DashboardContent() {
       </div>
 
       {/* Upcoming Sessions & Recent Activity Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6" id="tour-upcoming">
         {/* Upcoming Sessions */}
         <Card>
           <CardHeader>
@@ -635,7 +639,7 @@ function DashboardContent() {
         </Card>
 
         {/* Recent Activity */}
-        <Card>
+        <Card id="tour-activity">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <BarChart3 className="h-5 w-5" />
@@ -672,7 +676,7 @@ function DashboardContent() {
 
       {/* Program Progress Tracker */}
       {programProgress.length > 0 && (
-        <Card>
+        <Card id="tour-progress">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Target className="h-5 w-5" />
