@@ -591,7 +591,7 @@ function DashboardContent() {
       </div>
 
       {/* Upcoming Sessions & Recent Activity Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6" id="tour-upcoming">
         {/* Upcoming Sessions */}
         <Card>
           <CardHeader>
