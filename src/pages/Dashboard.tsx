@@ -639,7 +639,7 @@ function DashboardContent() {
         </Card>
 
         {/* Recent Activity */}
-        <Card>
+        <Card id="tour-activity">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <BarChart3 className="h-5 w-5" />
