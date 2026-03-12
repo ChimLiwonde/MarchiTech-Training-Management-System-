@@ -104,6 +104,7 @@ function DashboardContent() {
         fetchRecentActivity(),
         fetchUpcomingSessions(),
         fetchChartData(),
+        fetchProgramProgress(),
       ]).finally(() => setLoading(false));
     }
   }, [user, role]);
