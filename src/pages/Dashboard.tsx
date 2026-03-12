@@ -41,6 +41,15 @@ interface AttendanceStat {
   rate: number;
 }
 
+interface ProgramProgress {
+  programId: string;
+  programTitle: string;
+  totalAssessments: number;
+  passedAssessments: number;
+  hasCertificate: boolean;
+  percentage: number;
+}
+
 interface QuickStat {
   label: string;
   value: string | number;
