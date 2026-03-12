@@ -494,8 +494,11 @@ function DashboardContent() {
         </p>
       </div>
 
+      {/* Welcome Tour */}
+      <WelcomeTour />
+
       {/* Quick Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div id="tour-quick-stats" className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {quickStats.map((stat, i) => (
           <Card key={i} className="overflow-hidden">
             <CardContent className="p-4 flex items-center gap-4">
