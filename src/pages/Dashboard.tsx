@@ -676,7 +676,7 @@ function DashboardContent() {
 
       {/* Program Progress Tracker */}
       {programProgress.length > 0 && (
-        <Card>
+        <Card id="tour-progress">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Target className="h-5 w-5" />
