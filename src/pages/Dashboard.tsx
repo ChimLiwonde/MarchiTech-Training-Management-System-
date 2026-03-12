@@ -93,6 +93,7 @@ function DashboardContent() {
   const [upcomingSessions, setUpcomingSessions] = useState<UpcomingSession[]>([]);
   const [enrollmentChart, setEnrollmentChart] = useState<{ name: string; count: number }[]>([]);
   const [passRateChart, setPassRateChart] = useState<{ name: string; value: number }[]>([]);
+  const [programProgress, setProgramProgress] = useState<ProgramProgress[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
