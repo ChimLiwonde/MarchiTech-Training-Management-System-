@@ -503,13 +503,20 @@ function DashboardContent() {
       {/* Quick Stats */}
       <div id="tour-quick-stats" className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {quickStats.map((stat, i) => (
-          <Card key={i} className="overflow-hidden">
+          <Card
+            key={i}
+            className="overflow-hidden cursor-pointer hover:shadow-md transition-shadow group"
+            onClick={() => stat.path && navigate(stat.path)}
+          >
             <CardContent className="p-4 flex items-center gap-4">
               <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
                 <stat.icon className="w-6 h-6 text-primary" />
               </div>
-              <div>
-                <p className="text-2xl font-bold">{stat.value}</p>
+              <div className="flex-1">
+                <div className="flex items-center gap-1">
+                  <p className="text-2xl font-bold">{stat.value}</p>
+                  <ArrowUpRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                </div>
                 <p className="text-sm text-muted-foreground">{stat.label}</p>
               </div>
             </CardContent>
