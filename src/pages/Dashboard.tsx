@@ -60,6 +60,7 @@ interface QuickStat {
   value: string | number;
   icon: React.ElementType;
   color?: string;
+  path?: string;
 }
 
 interface ActivityItem {
