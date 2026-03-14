@@ -17,6 +17,7 @@ import {
   SidebarTrigger,
 } from '@/components/ui/sidebar';
 import { Separator } from '@/components/ui/separator';
+import NotificationBell from '@/components/NotificationBell';
 import {
   GraduationCap,
   LayoutDashboard,
