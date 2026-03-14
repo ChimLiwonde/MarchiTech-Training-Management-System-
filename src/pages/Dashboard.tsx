@@ -89,9 +89,10 @@ const CHART_COLORS = [
 ];
 
 function DashboardContent() {
+  const navigate = useNavigate();
   const { user, role } = useAuth();
   const [attendanceStats, setAttendanceStats] = useState<AttendanceStat[]>([]);
-  const [quickStats, setQuickStats] = useState<QuickStat[]>([]);
+  const [quickStats, setQuickStats] = useState<(QuickStat & { path?: string })[]>([]);
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [upcomingSessions, setUpcomingSessions] = useState<UpcomingSession[]>([]);
   const [enrollmentChart, setEnrollmentChart] = useState<{ name: string; count: number }[]>([]);
