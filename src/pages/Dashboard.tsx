@@ -124,10 +124,10 @@ function DashboardContent() {
         supabase.from('certificates').select('id', { count: 'exact', head: true }),
       ]);
       stats.push(
-        { label: 'Total Users', value: usersRes.count ?? 0, icon: Users },
-        { label: 'Active Trainings', value: programsRes.count ?? 0, icon: BookOpen },
-        { label: 'Sessions Today', value: sessionsRes.count ?? 0, icon: Calendar },
-        { label: 'Certificates Issued', value: certsRes.count ?? 0, icon: Award },
+        { label: 'Total Users', value: usersRes.count ?? 0, icon: Users, path: '/users' },
+        { label: 'Active Trainings', value: programsRes.count ?? 0, icon: BookOpen, path: '/trainings' },
+        { label: 'Sessions Today', value: sessionsRes.count ?? 0, icon: Calendar, path: '/sessions' },
+        { label: 'Certificates Issued', value: certsRes.count ?? 0, icon: Award, path: '/certificates' },
       );
     } else if (role === 'trainer') {
       const [programsRes, enrollmentsRes, sessionsRes, certsRes] = await Promise.all([
@@ -143,10 +143,10 @@ function DashboardContent() {
       const traineeCount = (enrollmentsRes.data || []).filter(e => trainerProgramIds.includes(e.program_id)).length;
 
       stats.push(
-        { label: 'My Trainings', value: programsRes.count ?? 0, icon: BookOpen },
-        { label: 'Total Trainees', value: traineeCount, icon: Users },
-        { label: 'Upcoming Sessions', value: sessionsRes.count ?? 0, icon: Calendar },
-        { label: 'Certificates Issued', value: certsRes.count ?? 0, icon: Award },
+        { label: 'My Trainings', value: programsRes.count ?? 0, icon: BookOpen, path: '/trainings' },
+        { label: 'Total Trainees', value: traineeCount, icon: Users, path: '/users' },
+        { label: 'Upcoming Sessions', value: sessionsRes.count ?? 0, icon: Calendar, path: '/sessions' },
+        { label: 'Certificates Issued', value: certsRes.count ?? 0, icon: Award, path: '/certificates' },
       );
     } else {
       const [enrollRes, sessionsRes, certsRes, attemptsRes] = await Promise.all([
@@ -156,10 +156,10 @@ function DashboardContent() {
         supabase.from('assessment_attempts').select('id', { count: 'exact', head: true }).eq('trainee_id', user!.id).eq('passed', true),
       ]);
       stats.push(
-        { label: 'Enrolled Programs', value: enrollRes.count ?? 0, icon: BookOpen },
-        { label: 'Upcoming Sessions', value: sessionsRes.count ?? 0, icon: Calendar },
-        { label: 'Assessments Passed', value: attemptsRes.count ?? 0, icon: GraduationCap },
-        { label: 'Certificates', value: certsRes.count ?? 0, icon: Award },
+        { label: 'Enrolled Programs', value: enrollRes.count ?? 0, icon: BookOpen, path: '/trainings' },
+        { label: 'Upcoming Sessions', value: sessionsRes.count ?? 0, icon: Calendar, path: '/sessions' },
+        { label: 'Assessments Passed', value: attemptsRes.count ?? 0, icon: GraduationCap, path: '/assessments' },
+        { label: 'Certificates', value: certsRes.count ?? 0, icon: Award, path: '/certificates' },
       );
     }
     setQuickStats(stats);
