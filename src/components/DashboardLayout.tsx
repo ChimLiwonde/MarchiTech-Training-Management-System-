@@ -215,9 +215,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <header className="flex h-14 items-center gap-2 border-b px-4">
             <SidebarTrigger />
             <Separator orientation="vertical" className="h-6" />
-            <h2 className="text-sm font-semibold text-foreground">
+            <h2 className="text-sm font-semibold text-foreground flex-1">
               {[...mainNav, ...roleNav, ...accountNav].find(i => i.url === location.pathname)?.title || 'Dashboard'}
             </h2>
+            <NotificationBell />
           </header>
           <main className="flex-1 p-6">
             {children}
