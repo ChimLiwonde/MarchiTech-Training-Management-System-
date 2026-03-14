@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -20,6 +21,7 @@ import {
   UserPlus,
   CheckCircle2,
   Target,
+  ArrowUpRight,
 } from 'lucide-react';
 import {
   BarChart,
@@ -58,6 +60,7 @@ interface QuickStat {
   value: string | number;
   icon: React.ElementType;
   color?: string;
+  path?: string;
 }
 
 interface ActivityItem {
@@ -87,9 +90,10 @@ const CHART_COLORS = [
 ];
 
 function DashboardContent() {
+  const navigate = useNavigate();
   const { user, role } = useAuth();
   const [attendanceStats, setAttendanceStats] = useState<AttendanceStat[]>([]);
-  const [quickStats, setQuickStats] = useState<QuickStat[]>([]);
+  const [quickStats, setQuickStats] = useState<(QuickStat & { path?: string })[]>([]);
   const [activities, setActivities] = useState<ActivityItem[]>([]);
   const [upcomingSessions, setUpcomingSessions] = useState<UpcomingSession[]>([]);
   const [enrollmentChart, setEnrollmentChart] = useState<{ name: string; count: number }[]>([]);
@@ -121,10 +125,10 @@ function DashboardContent() {
         supabase.from('certificates').select('id', { count: 'exact', head: true }),
       ]);
       stats.push(
-        { label: 'Total Users', value: usersRes.count ?? 0, icon: Users },
-        { label: 'Active Trainings', value: programsRes.count ?? 0, icon: BookOpen },
-        { label: 'Sessions Today', value: sessionsRes.count ?? 0, icon: Calendar },
-        { label: 'Certificates Issued', value: certsRes.count ?? 0, icon: Award },
+        { label: 'Total Users', value: usersRes.count ?? 0, icon: Users, path: '/users' },
+        { label: 'Active Trainings', value: programsRes.count ?? 0, icon: BookOpen, path: '/trainings' },
+        { label: 'Sessions Today', value: sessionsRes.count ?? 0, icon: Calendar, path: '/sessions' },
+        { label: 'Certificates Issued', value: certsRes.count ?? 0, icon: Award, path: '/certificates' },
       );
     } else if (role === 'trainer') {
       const [programsRes, enrollmentsRes, sessionsRes, certsRes] = await Promise.all([
@@ -140,10 +144,10 @@ function DashboardContent() {
       const traineeCount = (enrollmentsRes.data || []).filter(e => trainerProgramIds.includes(e.program_id)).length;
 
       stats.push(
-        { label: 'My Trainings', value: programsRes.count ?? 0, icon: BookOpen },
-        { label: 'Total Trainees', value: traineeCount, icon: Users },
-        { label: 'Upcoming Sessions', value: sessionsRes.count ?? 0, icon: Calendar },
-        { label: 'Certificates Issued', value: certsRes.count ?? 0, icon: Award },
+        { label: 'My Trainings', value: programsRes.count ?? 0, icon: BookOpen, path: '/trainings' },
+        { label: 'Total Trainees', value: traineeCount, icon: Users, path: '/users' },
+        { label: 'Upcoming Sessions', value: sessionsRes.count ?? 0, icon: Calendar, path: '/sessions' },
+        { label: 'Certificates Issued', value: certsRes.count ?? 0, icon: Award, path: '/certificates' },
       );
     } else {
       const [enrollRes, sessionsRes, certsRes, attemptsRes] = await Promise.all([
@@ -153,10 +157,10 @@ function DashboardContent() {
         supabase.from('assessment_attempts').select('id', { count: 'exact', head: true }).eq('trainee_id', user!.id).eq('passed', true),
       ]);
       stats.push(
-        { label: 'Enrolled Programs', value: enrollRes.count ?? 0, icon: BookOpen },
-        { label: 'Upcoming Sessions', value: sessionsRes.count ?? 0, icon: Calendar },
-        { label: 'Assessments Passed', value: attemptsRes.count ?? 0, icon: GraduationCap },
-        { label: 'Certificates', value: certsRes.count ?? 0, icon: Award },
+        { label: 'Enrolled Programs', value: enrollRes.count ?? 0, icon: BookOpen, path: '/trainings' },
+        { label: 'Upcoming Sessions', value: sessionsRes.count ?? 0, icon: Calendar, path: '/sessions' },
+        { label: 'Assessments Passed', value: attemptsRes.count ?? 0, icon: GraduationCap, path: '/assessments' },
+        { label: 'Certificates', value: certsRes.count ?? 0, icon: Award, path: '/certificates' },
       );
     }
     setQuickStats(stats);
@@ -500,13 +504,20 @@ function DashboardContent() {
       {/* Quick Stats */}
       <div id="tour-quick-stats" className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {quickStats.map((stat, i) => (
-          <Card key={i} className="overflow-hidden">
+          <Card
+            key={i}
+            className="overflow-hidden cursor-pointer hover:shadow-md transition-shadow group"
+            onClick={() => stat.path && navigate(stat.path)}
+          >
             <CardContent className="p-4 flex items-center gap-4">
               <div className="w-12 h-12 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
                 <stat.icon className="w-6 h-6 text-primary" />
               </div>
-              <div>
-                <p className="text-2xl font-bold">{stat.value}</p>
+              <div className="flex-1">
+                <div className="flex items-center gap-1">
+                  <p className="text-2xl font-bold">{stat.value}</p>
+                  <ArrowUpRight className="w-4 h-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+                </div>
                 <p className="text-sm text-muted-foreground">{stat.label}</p>
               </div>
             </CardContent>
