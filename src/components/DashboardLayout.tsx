@@ -32,6 +32,7 @@ import {
   Award,
   FileText,
   ClipboardCheck,
+  TrendingUp,
 } from 'lucide-react';
 
 interface NavItem {
@@ -97,6 +98,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       { title: 'My Schedule', url: '/schedule', icon: Calendar },
       { title: 'Resources', url: '/resources', icon: FileText },
       { title: 'Assessments', url: '/assessments', icon: ClipboardCheck },
+      { title: 'My Progress', url: '/progress', icon: TrendingUp },
       { title: 'Certificates', url: '/certificates', icon: Award },
     );
   }
