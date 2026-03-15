@@ -32,6 +32,7 @@ import {
   Award,
   FileText,
   ClipboardCheck,
+  TrendingUp,
 } from 'lucide-react';
 
 interface NavItem {
