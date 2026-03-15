@@ -250,13 +250,31 @@ function SessionsContent() {
                 {session.notes && (
                   <p className="text-xs mt-2 border-t pt-2">{session.notes}</p>
                 )}
-                {canCreate && (
-                  <div className="pt-2">
+                <div className="pt-2 flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      const ics = generateICS({
+                        title: session.program_title || 'Training Session',
+                        date: session.session_date,
+                        startTime: session.start_time,
+                        endTime: session.end_time,
+                        location: session.location,
+                        description: session.notes,
+                      });
+                      downloadICS(`session-${session.session_date}`, ics);
+                      toast({ title: 'Calendar file downloaded' });
+                    }}
+                  >
+                    <Download className="h-4 w-4 mr-1" />Add to Calendar
+                  </Button>
+                  {canCreate && (
                     <Button size="sm" variant="ghost" className="text-destructive" onClick={() => handleDelete(session.id)}>
                       <Trash2 className="h-4 w-4 mr-1" />Delete
                     </Button>
-                  </div>
-                )}
+                  )}
+                </div>
               </CardContent>
             </Card>
           ))}
