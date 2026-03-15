@@ -11,7 +11,8 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from '@/hooks/use-toast';
-import { Calendar, Clock, MapPin, Plus, Loader2, BookOpen, Trash2 } from 'lucide-react';
+import { Calendar, Clock, MapPin, Plus, Loader2, BookOpen, Trash2, Download } from 'lucide-react';
+import { generateICS, downloadICS } from '@/lib/icsExport';
 
 interface Session {
   id: string;
