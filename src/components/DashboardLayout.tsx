@@ -100,6 +100,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       { title: 'Resources', url: '/resources', icon: FileText },
       { title: 'Assessments', url: '/assessments', icon: ClipboardCheck },
       { title: 'My Progress', url: '/progress', icon: TrendingUp },
+      { title: 'Feedback', url: '/feedback', icon: MessageSquare },
       { title: 'Certificates', url: '/certificates', icon: Award },
     );
   }
