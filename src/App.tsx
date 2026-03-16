@@ -19,6 +19,7 @@ import Assessments from "./pages/Assessments";
 import Certificates from "./pages/Certificates";
 import Reports from "./pages/Reports";
 import Progress from "./pages/Progress";
+import Feedback from "./pages/Feedback";
 import NotFound from "./pages/NotFound";
 import VerifyCertificate from "./pages/VerifyCertificate";
 
