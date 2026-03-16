@@ -83,6 +83,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       { title: 'Assessments', url: '/assessments', icon: ClipboardCheck },
       { title: 'Certificates', url: '/certificates', icon: Award },
       { title: 'Reports', url: '/reports', icon: BarChart3 },
+      { title: 'Feedback', url: '/feedback', icon: MessageSquare },
     );
   } else if (role === 'trainer') {
     roleNav.push(
