@@ -33,6 +33,7 @@ import {
   FileText,
   ClipboardCheck,
   TrendingUp,
+  MessageSquare,
 } from 'lucide-react';
 
 interface NavItem {
