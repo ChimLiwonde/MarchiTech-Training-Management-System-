@@ -33,6 +33,7 @@ import {
   FileText,
   ClipboardCheck,
   TrendingUp,
+  MessageSquare,
 } from 'lucide-react';
 
 interface NavItem {
@@ -82,6 +83,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       { title: 'Assessments', url: '/assessments', icon: ClipboardCheck },
       { title: 'Certificates', url: '/certificates', icon: Award },
       { title: 'Reports', url: '/reports', icon: BarChart3 },
+      { title: 'Feedback', url: '/feedback', icon: MessageSquare },
     );
   } else if (role === 'trainer') {
     roleNav.push(
@@ -91,6 +93,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       { title: 'Resources', url: '/resources', icon: FileText },
       { title: 'Assessments', url: '/assessments', icon: ClipboardCheck },
       { title: 'Certificates', url: '/certificates', icon: Award },
+      { title: 'Feedback', url: '/feedback', icon: MessageSquare },
     );
   } else {
     roleNav.push(
@@ -99,6 +102,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       { title: 'Resources', url: '/resources', icon: FileText },
       { title: 'Assessments', url: '/assessments', icon: ClipboardCheck },
       { title: 'My Progress', url: '/progress', icon: TrendingUp },
+      { title: 'Feedback', url: '/feedback', icon: MessageSquare },
       { title: 'Certificates', url: '/certificates', icon: Award },
     );
   }

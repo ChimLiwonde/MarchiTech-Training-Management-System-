@@ -327,6 +327,44 @@ export type Database = {
         }
         Relationships: []
       }
+      program_reviews: {
+        Row: {
+          comment: string | null
+          created_at: string
+          id: string
+          program_id: string
+          rating: number
+          trainee_id: string
+          updated_at: string
+        }
+        Insert: {
+          comment?: string | null
+          created_at?: string
+          id?: string
+          program_id: string
+          rating: number
+          trainee_id: string
+          updated_at?: string
+        }
+        Update: {
+          comment?: string | null
+          created_at?: string
+          id?: string
+          program_id?: string
+          rating?: number
+          trainee_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "program_reviews_program_id_fkey"
+            columns: ["program_id"]
+            isOneToOne: false
+            referencedRelation: "training_programs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sessions: {
         Row: {
           created_at: string
