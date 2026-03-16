@@ -93,6 +93,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       { title: 'Resources', url: '/resources', icon: FileText },
       { title: 'Assessments', url: '/assessments', icon: ClipboardCheck },
       { title: 'Certificates', url: '/certificates', icon: Award },
+      { title: 'Feedback', url: '/feedback', icon: MessageSquare },
     );
   } else {
     roleNav.push(
