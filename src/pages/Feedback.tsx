@@ -31,6 +31,27 @@ interface ProgramWithReview {
   reviewCount: number;
 }
 
+interface ProgramRow {
+  id: string;
+  title: string;
+  description: string | null;
+  status: string;
+}
+
+interface EnrollmentWithProgram {
+  program_id: string;
+  training_programs: ProgramRow | null;
+}
+
+interface ProgramReviewRow {
+  id: string;
+  program_id: string;
+  trainee_id: string;
+  rating: number;
+  comment: string | null;
+  created_at: string;
+}
+
 function StarRating({ rating, onRate, interactive = false, size = 'md' }: {
   rating: number;
   onRate?: (r: number) => void;
@@ -84,7 +105,7 @@ export default function Feedback() {
 
     try {
       // Fetch programs the trainee is enrolled in (approved)
-      let programsData: any[] = [];
+      let programsData: ProgramRow[] = [];
 
       if (isTrainee) {
         const { data: enrollments } = await supabase
@@ -93,19 +114,19 @@ export default function Feedback() {
           .eq('trainee_id', user.id)
           .eq('status', 'approved');
 
-        programsData = (enrollments || [])
-          .map((e: any) => e.training_programs)
-          .filter(Boolean);
+        programsData = ((enrollments || []) as EnrollmentWithProgram[])
+          .map((e) => e.training_programs)
+          .filter((p): p is ProgramRow => Boolean(p));
       } else {
         // Trainers/admins see all programs with reviews
         const { data } = await supabase
           .from('training_programs')
           .select('id, title, description, status');
-        programsData = data || [];
+        programsData = (data as ProgramRow[]) || [];
       }
 
       // Fetch all reviews for these programs
-      const programIds = programsData.map((p: any) => p.id);
+      const programIds = programsData.map((p) => p.id);
       if (programIds.length === 0) {
         setPrograms([]);
         setLoading(false);
@@ -117,13 +138,14 @@ export default function Feedback() {
         .select('*')
         .in('program_id', programIds);
 
-      const enriched: ProgramWithReview[] = programsData.map((p: any) => {
-        const programReviews = (reviews || []).filter((r: any) => r.program_id === p.id);
+      const typedReviews = (reviews || []) as ProgramReviewRow[];
+      const enriched: ProgramWithReview[] = programsData.map((p) => {
+        const programReviews = typedReviews.filter((r) => r.program_id === p.id);
         const myReview = isTrainee
-          ? programReviews.find((r: any) => r.trainee_id === user.id) || null
+          ? programReviews.find((r) => r.trainee_id === user.id) || null
           : null;
         const avgRating = programReviews.length > 0
-          ? programReviews.reduce((sum: number, r: any) => sum + r.rating, 0) / programReviews.length
+          ? programReviews.reduce((sum: number, r) => sum + r.rating, 0) / programReviews.length
           : null;
 
         return {
@@ -145,6 +167,7 @@ export default function Feedback() {
     }
   };
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { fetchData(); }, [user, role]);
 
   const openReviewDialog = (programId: string, existing?: ProgramWithReview['myReview']) => {
@@ -184,8 +207,9 @@ export default function Feedback() {
       }
       setDialogOpen(false);
       fetchData();
-    } catch (err: any) {
-      toast({ title: 'Error', description: err.message || 'Failed to submit review', variant: 'destructive' });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to submit review';
+      toast({ title: 'Error', description: message, variant: 'destructive' });
     } finally {
       setSubmitting(false);
     }

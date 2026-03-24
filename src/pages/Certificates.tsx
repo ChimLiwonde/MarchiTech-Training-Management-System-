@@ -53,6 +53,7 @@ export default function Certificates() {
   const [issuing, setIssuing] = useState(false);
   const [viewCert, setViewCert] = useState<Certificate | null>(null);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { fetchData(); }, []);
 
   const fetchData = async () => {

@@ -77,6 +77,7 @@ export default function Assessments() {
   const [submitting, setSubmitting] = useState(false);
   const [lastResult, setLastResult] = useState<{ score: number; total: number; passed: boolean } | null>(null);
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { fetchData(); }, []);
 
   const fetchData = async () => {

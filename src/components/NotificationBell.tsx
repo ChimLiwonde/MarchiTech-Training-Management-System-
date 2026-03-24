@@ -84,7 +84,9 @@ export default function NotificationBell() {
           filter: `user_id=eq.${user.id}`,
         },
         (payload) => {
-          setNotifications(prev => prev.filter(n => n.id !== (payload.old as any).id));
+          const deletedId = (payload.old as { id?: string } | null)?.id;
+          if (!deletedId) return;
+          setNotifications(prev => prev.filter(n => n.id !== deletedId));
         }
       )
       .subscribe();

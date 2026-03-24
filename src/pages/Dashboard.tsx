@@ -112,6 +112,8 @@ function DashboardContent() {
         fetchProgramProgress(),
       ]).finally(() => setLoading(false));
     }
+    // We intentionally run dashboard data loaders on auth context changes only.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, role]);
 
   const fetchQuickStats = async () => {

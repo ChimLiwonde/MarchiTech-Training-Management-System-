@@ -30,6 +30,7 @@ interface Stats {
 
 interface ProgramEnrollment { name: string; enrolled: number; approved: number; }
 interface TrainerMetric { name: string; programs: number; trainees: number; passRate: number; }
+interface ProgramFinancial { name: string; revenue: number; cost: number; profit: number; }
 
 export default function Reports() {
   const { role } = useAuth();
@@ -45,37 +46,45 @@ export default function Reports() {
   const [enrollmentStatusData, setEnrollmentStatusData] = useState<{ name: string; value: number }[]>([]);
   const [assessmentData, setAssessmentData] = useState<{ name: string; value: number }[]>([]);
   const [trainerMetrics, setTrainerMetrics] = useState<TrainerMetric[]>([]);
+  const [totalRevenue, setTotalRevenue] = useState<number>(0);
+  const [totalCost, setTotalCost] = useState<number>(0);
+  const [totalProfit, setTotalProfit] = useState<number>(0);
+  const [programFinancials, setProgramFinancials] = useState<ProgramFinancial[]>([]);
 
   useEffect(() => { fetchReports(); }, []);
 
   const fetchReports = async (from?: string, to?: string) => {
     setLoading(true);
-    const [rolesRes, programsRes, enrollmentsRes, certsRes, assessmentsRes, attemptsRes, profilesRes] =
+    const [rolesRes, programsRes, enrollmentsRes, certsRes, assessmentsRes, attemptsRes, profilesRes, paymentsRes] =
       await Promise.all([
         supabase.from('user_roles').select('role, user_id'),
-        supabase.from('training_programs').select('id, title, status, trainer_id'),
+        supabase.from('training_programs').select('id, title, status, trainer_id, cost_amount'),
         supabase.from('enrollments').select('program_id, status, enrolled_at'),
         supabase.from('certificates').select('id, issued_at'),
         supabase.from('assessments').select('id, program_id'),
         supabase.from('assessment_attempts').select('id, passed, assessment_id, completed_at'),
         supabase.from('profiles').select('user_id, full_name, email'),
+        supabase.from('payments').select('program_id, amount, status, created_at'),
       ]);
 
     let enrollments = enrollmentsRes.data || [];
     let certs = certsRes.data || [];
     let attempts = attemptsRes.data || [];
+    let payments = paymentsRes.data || [];
 
     // Apply date filters
     if (from) {
       enrollments = enrollments.filter(e => e.enrolled_at >= from);
       certs = certs.filter(c => c.issued_at >= from);
       attempts = attempts.filter(a => !a.completed_at || a.completed_at >= from);
+      payments = payments.filter(p => p.created_at >= from);
     }
     if (to) {
       const toEnd = to + 'T23:59:59';
       enrollments = enrollments.filter(e => e.enrolled_at <= toEnd);
       certs = certs.filter(c => c.issued_at <= toEnd);
       attempts = attempts.filter(a => !a.completed_at || a.completed_at <= toEnd);
+      payments = payments.filter(p => p.created_at <= toEnd);
     }
 
     const roles = rolesRes.data || [];
@@ -96,6 +105,48 @@ export default function Reports() {
       passedAttempts: attempts.filter(a => a.passed).length,
     };
     setStats(newStats);
+
+    // Revenue from successful payments
+    const revenue = payments
+      .filter((p: { status?: string }) => p.status === 'successful')
+      .reduce((sum: number, p: { amount?: number | string }) => sum + Number(p.amount || 0), 0);
+    setTotalRevenue(revenue);
+
+    const successfulProgramIds = new Set(
+      payments
+        .filter((p: { status?: string; program_id?: string }) => p.status === 'successful' && !!p.program_id)
+        .map((p: { program_id?: string }) => p.program_id as string)
+    );
+
+    const cost = programs
+      .filter((p: { id: string }) => successfulProgramIds.has(p.id))
+      .reduce((sum: number, p: { cost_amount?: number | string }) => sum + Number(p.cost_amount || 0), 0);
+    setTotalCost(cost);
+    setTotalProfit(revenue - cost);
+
+    const revenueByProgram: Record<string, number> = {};
+    payments
+      .filter((p: { status?: string }) => p.status === 'successful')
+      .forEach((p: { program_id?: string; amount?: number | string }) => {
+        if (!p.program_id) return;
+        revenueByProgram[p.program_id] = (revenueByProgram[p.program_id] || 0) + Number(p.amount || 0);
+      });
+
+    const financials: ProgramFinancial[] = programs
+      .filter((p: { id: string }) => (revenueByProgram[p.id] || 0) > 0)
+      .map((p: { id: string; title: string; cost_amount?: number | string }) => {
+        const progRevenue = revenueByProgram[p.id] || 0;
+        const progCost = Number(p.cost_amount || 0);
+        return {
+          name: p.title.length > 20 ? `${p.title.slice(0, 20)}…` : p.title,
+          revenue: progRevenue,
+          cost: progCost,
+          profit: progRevenue - progCost,
+        };
+      })
+      .sort((a, b) => b.profit - a.profit)
+      .slice(0, 8);
+    setProgramFinancials(financials);
 
     // Program enrollment chart
     const progMap: Record<string, { title: string; enrolled: number; approved: number }> = {};
@@ -165,12 +216,18 @@ export default function Reports() {
       ['Total Attempts', stats.totalAttempts],
       ['Passed Attempts', stats.passedAttempts],
       ['Pass Rate', `${passRate}%`],
+      ['Total Revenue (MWK)', totalRevenue],
+      ['Total Cost (MWK)', totalCost],
+      ['Total Profit (MWK)', totalProfit],
       [],
       ['Trainer', 'Programs', 'Trainees', 'Pass Rate'],
       ...trainerMetrics.map(t => [t.name, t.programs, t.trainees, `${t.passRate}%`]),
       [],
       ['Program', 'Enrolled', 'Approved'],
       ...programEnrollments.map(p => [p.name, p.enrolled, p.approved]),
+      [],
+      ['Program', 'Revenue', 'Cost', 'Profit'],
+      ...programFinancials.map(p => [p.name, p.revenue, p.cost, p.profit]),
     ];
     const csv = rows.map(r => (r as (string | number)[]).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
@@ -235,12 +292,14 @@ export default function Reports() {
         </Card>
 
         {/* KPI Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
           {[
             { label: 'Total Trainees', value: stats.totalTrainees, icon: Users, colorClass: 'text-primary bg-primary/10' },
             { label: 'Active Programs', value: stats.activePrograms, icon: BookOpen, colorClass: 'text-blue-500 bg-blue-500/10' },
             { label: 'Certificates Issued', value: stats.totalCertificates, icon: Award, colorClass: 'text-green-500 bg-green-500/10' },
             { label: 'Pass Rate', value: `${passRate}%`, icon: TrendingUp, colorClass: 'text-yellow-600 bg-yellow-500/10' },
+            { label: 'Total Revenue (MWK)', value: totalRevenue, icon: ClipboardList, colorClass: 'text-emerald-600 bg-emerald-500/10' },
+            { label: 'Total Profit (MWK)', value: totalProfit, icon: CheckCircle2, colorClass: 'text-indigo-600 bg-indigo-500/10' },
           ].map(({ label, value, icon: Icon, colorClass }) => (
             <Card key={label}>
               <CardContent className="pt-6">
@@ -316,6 +375,30 @@ export default function Reports() {
                     </Pie>
                     <Tooltip /><Legend />
                   </PieChart>
+                </ResponsiveContainer>
+              )}
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Profit by Program</CardTitle>
+              <CardDescription>Revenue minus configured program cost</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {programFinancials.length === 0 ? (
+                <div className="h-48 flex items-center justify-center text-muted-foreground text-sm">No financial data yet</div>
+              ) : (
+                <ResponsiveContainer width="100%" height={220}>
+                  <BarChart data={programFinancials} margin={{ top: 5, right: 10, left: -20, bottom: 40 }}>
+                    <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                    <XAxis dataKey="name" tick={{ fontSize: 11 }} angle={-30} textAnchor="end" interval={0} />
+                    <YAxis tick={{ fontSize: 11 }} allowDecimals={false} />
+                    <Tooltip />
+                    <Legend />
+                    <Bar dataKey="revenue" fill={COLORS[1]} name="Revenue" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="cost" fill={COLORS[3]} name="Cost" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="profit" fill={COLORS[0]} name="Profit" radius={[4, 4, 0, 0]} />
+                  </BarChart>
                 </ResponsiveContainer>
               )}
             </CardContent>

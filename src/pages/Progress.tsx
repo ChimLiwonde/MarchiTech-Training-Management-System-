@@ -63,6 +63,7 @@ function ProgressContent() {
 
   useEffect(() => {
     if (user) fetchProgress();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   const fetchProgress = async () => {
@@ -133,7 +134,7 @@ function ProgressContent() {
         const progAssessments = assessmentsByProgram[p.id] || [];
         let passedCount = 0;
         let failedCount = 0;
-        let scores: number[] = [];
+        const scores: number[] = [];
 
         progAssessments.forEach(aid => {
           const atts = attemptsByAssessment[aid] || [];

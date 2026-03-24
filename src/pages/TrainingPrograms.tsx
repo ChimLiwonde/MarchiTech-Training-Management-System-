@@ -31,6 +31,9 @@ interface TrainingProgram {
   start_date: string | null;
   end_date: string | null;
   max_trainees: number | null;
+  fee_amount?: number | string | null;
+  cost_amount?: number | string | null;
+  currency?: string | null;
   status: string;
   created_at: string;
   trainer_name?: string | null;
@@ -44,16 +47,27 @@ interface Enrollment {
   enrolled_at: string;
 }
 
+interface Payment {
+  id: string;
+  program_id: string;
+  trainee_id: string;
+  amount: number;
+  currency: string;
+  status: string;
+}
+
 function TrainingProgramsContent() {
   const { user, role } = useAuth();
   const [programs, setPrograms] = useState<TrainingProgram[]>([]);
   const [enrollments, setEnrollments] = useState<Enrollment[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [createOpen, setCreateOpen] = useState(false);
   const [enrollmentsDialogOpen, setEnrollmentsDialogOpen] = useState(false);
   const [selectedProgram, setSelectedProgram] = useState<TrainingProgram | null>(null);
   const [programEnrollments, setProgramEnrollments] = useState<(Enrollment & { profile?: { full_name: string | null; email: string } })[]>([]);
+  const [enrolling, setEnrolling] = useState(false);
 
   // Create form state
   const [title, setTitle] = useState('');
@@ -61,6 +75,8 @@ function TrainingProgramsContent() {
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [maxTrainees, setMaxTrainees] = useState('30');
+  const [feeAmount, setFeeAmount] = useState('0');
+  const [costAmount, setCostAmount] = useState('0');
   const [status, setStatus] = useState('draft');
   const [submitting, setSubmitting] = useState(false);
 
@@ -69,6 +85,7 @@ function TrainingProgramsContent() {
     if (role === 'trainee') {
       fetchMyEnrollments();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [role]);
 
   const fetchPrograms = async () => {
@@ -102,11 +119,18 @@ function TrainingProgramsContent() {
   };
 
   const fetchMyEnrollments = async () => {
-    const { data } = await supabase
+    const [{ data: enrolls }, { data: pays }] = await Promise.all([
+      supabase
       .from('enrollments')
       .select('*')
-      .eq('trainee_id', user?.id || '');
-    setEnrollments(data || []);
+      .eq('trainee_id', user?.id || ''),
+      supabase
+        .from('payments')
+        .select('id, program_id, trainee_id, amount, currency, status')
+        .eq('trainee_id', user?.id || ''),
+    ]);
+    setEnrollments(enrolls || []);
+    setPayments(pays || []);
   };
 
   const handleCreate = async () => {
@@ -122,6 +146,9 @@ function TrainingProgramsContent() {
       start_date: startDate || null,
       end_date: endDate || null,
       max_trainees: parseInt(maxTrainees) || 30,
+      fee_amount: Number(feeAmount) || 0,
+      cost_amount: Number(costAmount) || 0,
+      currency: 'MWK',
       status,
     });
 
@@ -142,25 +169,128 @@ function TrainingProgramsContent() {
     setStartDate('');
     setEndDate('');
     setMaxTrainees('30');
+    setFeeAmount('0');
+    setCostAmount('0');
     setStatus('draft');
   };
 
   const handleEnroll = async (programId: string) => {
-    const { error } = await supabase.from('enrollments').insert({
-      program_id: programId,
-      trainee_id: user!.id,
-      status: 'pending',
-    });
+    try {
+      setEnrolling(true);
 
-    if (error) {
-      if (error.code === '23505') {
-        toast({ title: 'Already enrolled', description: 'You are already enrolled in this program.', variant: 'destructive' });
-      } else {
-        toast({ title: 'Error enrolling', description: error.message, variant: 'destructive' });
+      const program = programs.find(p => p.id === programId);
+      if (!program) return;
+
+      const amount = Number(program.fee_amount ?? 0);
+      const currency = program.currency || 'MWK';
+      if (!amount || amount <= 0) {
+        toast({
+          title: 'Fee not set',
+          description: 'This program has no fee amount configured. Ask the trainer to set `fee_amount` before paying.',
+          variant: 'destructive',
+        });
+        return;
       }
-    } else {
-      toast({ title: 'Enrollment submitted', description: 'Your enrollment request is pending approval.' });
+
+      // Enrollment/payment rows are unique per (program, trainee),
+      // so we support retries by updating existing rows to pending.
+      const { data: existingEnrollment } = await supabase
+        .from('enrollments')
+        .select('id,status')
+        .eq('program_id', programId)
+        .eq('trainee_id', user!.id)
+        .maybeSingle();
+
+      let enrollmentId: string;
+      if (existingEnrollment) {
+        if (existingEnrollment.status === 'approved') {
+          toast({ title: 'Already approved', description: 'You are already enrolled and approved for this training.', variant: 'destructive' });
+          return;
+        }
+        enrollmentId = existingEnrollment.id;
+        await supabase
+          .from('enrollments')
+          .update({ status: 'pending' })
+          .eq('id', enrollmentId);
+      } else {
+        const { error: enrollErr, data: inserted } = await supabase
+          .from('enrollments')
+          .insert({
+            program_id: programId,
+            trainee_id: user!.id,
+            status: 'pending',
+          })
+          .select('id')
+          .single();
+
+        if (enrollErr) {
+          toast({ title: 'Error enrolling', description: enrollErr.message, variant: 'destructive' });
+          return;
+        }
+
+        enrollmentId = inserted.id;
+      }
+
+      const { data: existingPayment } = await supabase
+        .from('payments')
+        .select('id,status')
+        .eq('program_id', programId)
+        .eq('trainee_id', user!.id)
+        .maybeSingle();
+
+      if (existingPayment) {
+        await supabase
+          .from('payments')
+          .update({
+            status: 'pending',
+            amount,
+            currency,
+            enrollment_id: enrollmentId,
+          })
+          .eq('id', existingPayment.id);
+      } else {
+        await supabase.from('payments').insert({
+          trainee_id: user!.id,
+          program_id: programId,
+          enrollment_id: enrollmentId,
+          amount,
+          currency,
+          status: 'pending',
+        });
+      }
+
+      // Create PayChangu hosted checkout session and redirect
+      const returnUrl = `${window.location.origin}/trainings`;
+      const { data: checkoutData, error: fnError } = await supabase.functions.invoke('paychangu-initiate', {
+        body: {
+          program_id: programId,
+          trainee_id: user!.id,
+          enrollment_id: enrollmentId,
+          amount,
+          currency,
+          return_url: returnUrl,
+        },
+      });
+
+      if (fnError || !checkoutData?.checkout_url) {
+        toast({
+          title: 'Payment initiation failed',
+          description: fnError?.message || 'Could not create checkout session.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      toast({
+        title: 'Redirecting to payment...',
+        description: 'Complete PayChangu test checkout to verify your enrollment.',
+      });
+
+      window.location.href = checkoutData.checkout_url;
+      // Enrollment approval will be handled via webhook after payment completion.
       fetchMyEnrollments();
+    } finally {
+      setEnrolling(false);
     }
   };
 
@@ -205,6 +335,29 @@ function TrainingProgramsContent() {
   };
 
   const handleEnrollmentAction = async (enrollmentId: string, newStatus: string) => {
+    if (newStatus === 'approved') {
+      // Enforce payment-first business rule
+      const { data: paymentRes, error: paymentErr } = await supabase
+        .from('payments')
+        .select('id,status')
+        .eq('enrollment_id', enrollmentId)
+        .maybeSingle();
+
+      if (paymentErr) {
+        toast({ title: 'Error', description: paymentErr.message, variant: 'destructive' });
+        return;
+      }
+
+      if (!paymentRes || paymentRes.status !== 'successful') {
+        toast({
+          title: 'Payment required',
+          description: 'This enrollment can only be approved after successful payment verification.',
+          variant: 'destructive',
+        });
+        return;
+      }
+    }
+
     const { error } = await supabase
       .from('enrollments')
       .update({ status: newStatus })
@@ -233,7 +386,13 @@ function TrainingProgramsContent() {
     (p.description || '').toLowerCase().includes(search.toLowerCase())
   );
 
-  const isEnrolled = (programId: string) => enrollments.some(e => e.program_id === programId);
+  const isApprovedEnrolled = (programId: string) =>
+    enrollments.some(e => e.program_id === programId && e.status === 'approved');
+
+  const getPaymentStatus = (programId: string) => {
+    const payment = payments.find(p => p.program_id === programId);
+    return payment?.status || null;
+  };
 
   const canCreateProgram = role === 'admin' || role === 'trainer';
 
@@ -286,6 +445,28 @@ function TrainingProgramsContent() {
                   <div>
                     <Label htmlFor="max">Max Trainees</Label>
                     <Input id="max" type="number" value={maxTrainees} onChange={(e) => setMaxTrainees(e.target.value)} />
+                  </div>
+                  <div>
+                    <Label htmlFor="fee">Fee Amount (MWK)</Label>
+                    <Input
+                      id="fee"
+                      type="number"
+                      value={feeAmount}
+                      onChange={(e) => setFeeAmount(e.target.value)}
+                      min="0"
+                      step="1"
+                    />
+                  </div>
+                  <div>
+                    <Label htmlFor="cost">Cost Amount (MWK)</Label>
+                    <Input
+                      id="cost"
+                      type="number"
+                      value={costAmount}
+                      onChange={(e) => setCostAmount(e.target.value)}
+                      min="0"
+                      step="1"
+                    />
                   </div>
                   <div>
                     <Label>Status</Label>
@@ -366,18 +547,39 @@ function TrainingProgramsContent() {
                     <Users className="h-4 w-4" />
                     <span>Max {program.max_trainees} trainees</span>
                   </div>
+                  <div className="flex items-center gap-2">
+                    <Badge variant="outline" className="text-xs">
+                      Fee: {Number(program.fee_amount || 0)} {program.currency || 'MWK'}
+                    </Badge>
+                    {(role === 'admin' || role === 'trainer') && (
+                      <Badge variant="outline" className="text-xs">
+                        Cost: {Number(program.cost_amount || 0)} {program.currency || 'MWK'}
+                      </Badge>
+                    )}
+                  </div>
+                  {role === 'trainee' && (
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline" className="text-xs">
+                        Payment: {getPaymentStatus(program.id) || 'none'}
+                      </Badge>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex gap-2 flex-wrap">
                   {/* Role-specific actions */}
-                  {role === 'trainee' && program.status === 'active' && !isEnrolled(program.id) && (
-                    <Button size="sm" onClick={() => handleEnroll(program.id)}>
+                  {role === 'trainee' && program.status === 'active' && !isApprovedEnrolled(program.id) && (() => {
+                    const ps = getPaymentStatus(program.id);
+                    const canRetry = ps === null || ps === 'failed' || ps === 'cancelled';
+                    return canRetry;
+                  })() && (
+                    <Button size="sm" onClick={() => handleEnroll(program.id)} disabled={enrolling}>
                       <UserPlus className="h-4 w-4 mr-1" />
-                      Enroll
+                      {enrolling ? 'Processing...' : 'Enroll'}
                     </Button>
                   )}
-                  {role === 'trainee' && isEnrolled(program.id) && (
-                    <Badge variant="secondary">Enrolled</Badge>
+                  {role === 'trainee' && isApprovedEnrolled(program.id) && (
+                    <Badge variant="secondary">Approved</Badge>
                   )}
 
                   {(role === 'admin' || (role === 'trainer' && program.trainer_id === user?.id)) && (
