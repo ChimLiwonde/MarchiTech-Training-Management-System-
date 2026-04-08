@@ -1,16 +1,15 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useAuth } from '@/hooks/useAuth';
+import { GraduationCap, Loader2, UserCheck, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useAuth, type AppRole } from '@/hooks/useAuth';
 import { useToast } from '@/hooks/use-toast';
-import { GraduationCap, Users, UserCheck, Loader2 } from 'lucide-react';
-
-type AppRole = 'admin' | 'trainer' | 'trainee';
+import { isXamppMode } from '@/lib/appConfig';
 
 export default function Auth() {
   const [isLoading, setIsLoading] = useState(false);
@@ -22,14 +21,16 @@ export default function Auth() {
   const navigate = useNavigate();
   const { toast } = useToast();
 
+  const postAuthPath = isXamppMode ? '/trainings' : '/dashboard';
+
   useEffect(() => {
     if (user) {
-      navigate('/dashboard');
+      navigate(postAuthPath);
     }
-  }, [user, navigate]);
+  }, [user, navigate, postAuthPath]);
 
-  const handleSignIn = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSignIn = async (event: React.FormEvent) => {
+    event.preventDefault();
     setIsLoading(true);
 
     const { error } = await signIn(email, password);
@@ -37,8 +38,8 @@ export default function Auth() {
     if (error) {
       toast({
         title: 'Login Failed',
-        description: error.message === 'Invalid login credentials' 
-          ? 'Invalid email or password. Please try again.' 
+        description: error.message === 'Invalid login credentials'
+          ? 'Invalid email or password. Please try again.'
           : error.message,
         variant: 'destructive',
       });
@@ -47,14 +48,14 @@ export default function Auth() {
         title: 'Welcome back!',
         description: 'You have successfully logged in.',
       });
-      navigate('/dashboard');
+      navigate(postAuthPath);
     }
 
     setIsLoading(false);
   };
 
-  const handleSignUp = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSignUp = async (event: React.FormEvent) => {
+    event.preventDefault();
     setIsLoading(true);
 
     if (!fullName.trim()) {
@@ -70,10 +71,9 @@ export default function Auth() {
     const { error } = await signUp(email, password, fullName, selectedRole);
 
     if (error) {
-      let message = error.message;
-      if (error.message.includes('already registered')) {
-        message = 'This email is already registered. Please sign in instead.';
-      }
+      const message = error.message.includes('already')
+        ? 'This email is already registered. Please sign in instead.'
+        : error.message;
       toast({
         title: 'Registration Failed',
         description: message,
@@ -84,7 +84,7 @@ export default function Auth() {
         title: 'Account Created!',
         description: 'Welcome to M\'archiTech Training Management System.',
       });
-      navigate('/dashboard');
+      navigate(postAuthPath);
     }
 
     setIsLoading(false);
@@ -114,10 +114,9 @@ export default function Auth() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-secondary/30 p-4">
       <div className="w-full max-w-md">
-        {/* Logo/Brand */}
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-xl bg-primary mb-4">
-            <GraduationCap className="w-8 h-8 text-primary-foreground" />
+        <div className="mb-8 text-center">
+          <div className="mb-4 inline-flex h-16 w-16 items-center justify-center rounded-xl bg-primary">
+            <GraduationCap className="h-8 w-8 text-primary-foreground" />
           </div>
           <h1 className="text-2xl font-bold text-primary">M'archiTech</h1>
           <p className="text-muted-foreground">Training Management System</p>
@@ -142,7 +141,7 @@ export default function Auth() {
                       type="email"
                       placeholder="you@example.com"
                       value={email}
-                      onChange={(e) => setEmail(e.target.value)}
+                      onChange={(event) => setEmail(event.target.value)}
                       required
                       disabled={isLoading}
                     />
@@ -155,7 +154,7 @@ export default function Auth() {
                       type="password"
                       placeholder="Enter your password"
                       value={password}
-                      onChange={(e) => setPassword(e.target.value)}
+                      onChange={(event) => setPassword(event.target.value)}
                       required
                       disabled={isLoading}
                     />
@@ -185,7 +184,7 @@ export default function Auth() {
                       type="text"
                       placeholder="John Doe"
                       value={fullName}
-                      onChange={(e) => setFullName(e.target.value)}
+                      onChange={(event) => setFullName(event.target.value)}
                       required
                       disabled={isLoading}
                     />
@@ -198,7 +197,7 @@ export default function Auth() {
                       type="email"
                       placeholder="you@example.com"
                       value={email}
-                      onChange={(e) => setEmail(e.target.value)}
+                      onChange={(event) => setEmail(event.target.value)}
                       required
                       disabled={isLoading}
                     />
@@ -211,7 +210,7 @@ export default function Auth() {
                       type="password"
                       placeholder="At least 6 characters"
                       value={password}
-                      onChange={(e) => setPassword(e.target.value)}
+                      onChange={(event) => setPassword(event.target.value)}
                       required
                       minLength={6}
                       disabled={isLoading}
@@ -235,7 +234,7 @@ export default function Auth() {
                           />
                           <Label
                             htmlFor={option.value}
-                            className="flex items-center gap-4 rounded-lg border-2 border-muted bg-popover p-4 hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary cursor-pointer transition-all"
+                            className="flex cursor-pointer items-center gap-4 rounded-lg border-2 border-muted bg-popover p-4 transition-all hover:bg-accent hover:text-accent-foreground peer-data-[state=checked]:border-primary"
                           >
                             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
                               <option.icon className="h-5 w-5 text-primary" />
@@ -268,7 +267,7 @@ export default function Auth() {
           </Tabs>
         </Card>
 
-        <p className="text-center text-sm text-muted-foreground mt-6">
+        <p className="mt-6 text-center text-sm text-muted-foreground">
           By continuing, you agree to our Terms of Service and Privacy Policy.
         </p>
       </div>

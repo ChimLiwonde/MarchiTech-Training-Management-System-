@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import {
   Sidebar,
@@ -19,21 +19,21 @@ import {
 import { Separator } from '@/components/ui/separator';
 import NotificationBell from '@/components/NotificationBell';
 import {
-  GraduationCap,
-  LayoutDashboard,
-  Users,
+  Award,
+  BarChart3,
   BookOpen,
   Calendar,
-  BarChart3,
-  User,
-  LogOut,
-  Loader2,
-  ClipboardList,
-  Award,
-  FileText,
   ClipboardCheck,
-  TrendingUp,
+  ClipboardList,
+  FileText,
+  GraduationCap,
+  LayoutDashboard,
+  Loader2,
+  LogOut,
   MessageSquare,
+  TrendingUp,
+  User,
+  Users,
 } from 'lucide-react';
 
 interface NavItem {
@@ -55,7 +55,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="flex min-h-screen items-center justify-center">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
       </div>
     );
@@ -72,7 +72,6 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
     { title: 'Dashboard', url: '/dashboard', icon: LayoutDashboard },
   ];
 
-  // Role-specific nav items
   const roleNav: NavItem[] = [];
   if (role === 'admin') {
     roleNav.push(
@@ -113,24 +112,30 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
   const getRoleLabel = () => {
     switch (role) {
-      case 'admin': return 'Administrator';
-      case 'trainer': return 'Trainer';
-      case 'trainee': return 'Trainee';
-      default: return 'User';
+      case 'admin':
+        return 'Administrator';
+      case 'trainer':
+        return 'Trainer';
+      case 'trainee':
+        return 'Trainee';
+      default:
+        return 'User';
     }
   };
 
+  const displayName = user.user_metadata?.full_name || user.full_name || user.email || 'User';
+
   return (
     <SidebarProvider>
-      <div className="min-h-screen flex w-full">
+      <div className="flex min-h-screen w-full">
         <Sidebar>
           <SidebarHeader className="p-4">
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-lg bg-sidebar-primary flex items-center justify-center">
-                <GraduationCap className="w-5 h-5 text-sidebar-primary-foreground" />
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-sidebar-primary">
+                <GraduationCap className="h-5 w-5 text-sidebar-primary-foreground" />
               </div>
               <div>
-                <h1 className="font-bold text-sm text-sidebar-foreground">M'archiTech</h1>
+                <h1 className="text-sm font-bold text-sidebar-foreground">M'archiTech</h1>
                 <p className="text-xs text-sidebar-foreground/60">Training Management</p>
               </div>
             </div>
@@ -199,18 +204,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </SidebarContent>
 
           <SidebarFooter className="p-4">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-8 h-8 rounded-full bg-sidebar-accent flex items-center justify-center">
-                <User className="w-4 h-4 text-sidebar-accent-foreground" />
+            <div className="mb-3 flex items-center gap-3">
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-sidebar-accent">
+                <User className="h-4 w-4 text-sidebar-accent-foreground" />
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-medium text-sidebar-foreground truncate">
-                  {user.user_metadata?.full_name || user.email}
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-xs font-medium text-sidebar-foreground">
+                  {displayName}
                 </p>
-                <p className="text-xs text-sidebar-foreground/60 truncate">{getRoleLabel()}</p>
+                <p className="truncate text-xs text-sidebar-foreground/60">{getRoleLabel()}</p>
               </div>
             </div>
-            <SidebarMenuButton onClick={handleSignOut} tooltip="Sign Out">
+            <SidebarMenuButton onClick={() => void handleSignOut()} tooltip="Sign Out">
               <LogOut className="h-4 w-4" />
               <span>Sign Out</span>
             </SidebarMenuButton>
@@ -221,14 +226,12 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           <header className="flex h-14 items-center gap-2 border-b px-4">
             <SidebarTrigger />
             <Separator orientation="vertical" className="h-6" />
-            <h2 className="text-sm font-semibold text-foreground flex-1">
-              {[...mainNav, ...roleNav, ...accountNav].find(i => i.url === location.pathname)?.title || 'Dashboard'}
+            <h2 className="flex-1 text-sm font-semibold text-foreground">
+              {[...mainNav, ...roleNav, ...accountNav].find((item) => item.url === location.pathname)?.title || 'Dashboard'}
             </h2>
             <NotificationBell />
           </header>
-          <main className="flex-1 p-6">
-            {children}
-          </main>
+          <main className="flex-1 p-6">{children}</main>
         </SidebarInset>
       </div>
     </SidebarProvider>

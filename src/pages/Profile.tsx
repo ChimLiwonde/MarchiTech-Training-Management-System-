@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
+import { isXamppMode } from '@/lib/appConfig';
+import { xamppApiRequest } from '@/lib/xamppApi';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,6 +10,20 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2, User, Mail, Phone, Save } from 'lucide-react';
+
+interface ProfileResponse {
+  data: {
+    id: string;
+    user_id: string;
+    email: string;
+    full_name: string | null;
+    avatar_url: string | null;
+    phone: string | null;
+    created_at: string;
+    updated_at: string;
+    role: string;
+  };
+}
 
 export default function Profile() {
   const { user, role } = useAuth();
@@ -17,6 +33,11 @@ export default function Profile() {
   const { data: profile, isLoading } = useQuery({
     queryKey: ['my-profile', user?.id],
     queryFn: async () => {
+      if (isXamppMode) {
+        const response = await xamppApiRequest<ProfileResponse>('/profile');
+        return response.data;
+      }
+
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
@@ -40,6 +61,14 @@ export default function Profile() {
 
   const updateMutation = useMutation({
     mutationFn: async () => {
+      if (isXamppMode) {
+        await xamppApiRequest<{ message: string }>('/profile', {
+          method: 'PATCH',
+          body: { full_name: fullName, phone },
+        });
+        return;
+      }
+
       const { error } = await supabase
         .from('profiles')
         .update({ full_name: fullName, phone })

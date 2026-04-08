@@ -1,6 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { isXamppMode } from '@/lib/appConfig';
+import { xamppApiRequest } from '@/lib/xamppApi';
 import DashboardLayout from '@/components/DashboardLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -11,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Plus, FileText, Link as LinkIcon, Download, Trash2, Upload } from 'lucide-react';
+import { Download, FileText, Link as LinkIcon, Loader2, Plus, Trash2, Upload } from 'lucide-react';
 
 interface Resource {
   id: string;
@@ -28,6 +30,11 @@ interface Resource {
 interface Program {
   id: string;
   title: string;
+}
+
+interface ResourcesResponse {
+  data: Resource[];
+  programs: Program[];
 }
 
 export default function Resources() {
@@ -49,74 +56,137 @@ export default function Resources() {
   const canManage = role === 'admin' || role === 'trainer';
 
   useEffect(() => {
-    fetchData();
-  }, []);
+    void fetchData();
+  }, [role, user?.id]);
 
   const fetchData = async () => {
     setLoading(true);
-    const [programsRes, resourcesRes] = await Promise.all([
-      supabase.from('training_programs').select('id, title').order('title'),
-      supabase.from('training_resources').select('*').order('created_at', { ascending: false }),
-    ]);
 
-    if (programsRes.data) setPrograms(programsRes.data);
-    if (resourcesRes.data) setResources(resourcesRes.data);
-    setLoading(false);
-  };
-
-  const handleUpload = async () => {
-    if (!user || !selectedProgram || !title.trim()) return;
-    setUploading(true);
-
-    let fileUrl: string | null = null;
-    let fileType: string | null = null;
-
-    if (file) {
-      const ext = file.name.split('.').pop();
-      const filePath = `${selectedProgram}/${Date.now()}-${file.name}`;
-      const { error: uploadError } = await supabase.storage
-        .from('training-materials')
-        .upload(filePath, file);
-
-      if (uploadError) {
-        toast({ title: 'Upload failed', description: uploadError.message, variant: 'destructive' });
-        setUploading(false);
+    try {
+      if (isXamppMode) {
+        const response = await xamppApiRequest<ResourcesResponse>('/resources');
+        setPrograms(response.programs ?? []);
+        setResources(response.data ?? []);
         return;
       }
 
-      const { data: urlData } = supabase.storage.from('training-materials').getPublicUrl(filePath);
-      fileUrl = urlData.publicUrl;
-      fileType = ext || null;
+      const [programsRes, resourcesRes] = await Promise.all([
+        supabase.from('training_programs').select('id, title').order('title'),
+        supabase.from('training_resources').select('*').order('created_at', { ascending: false }),
+      ]);
+
+      if (programsRes.error) {
+        throw programsRes.error;
+      }
+
+      if (resourcesRes.error) {
+        throw resourcesRes.error;
+      }
+
+      setPrograms(programsRes.data ?? []);
+      setResources(resourcesRes.data ?? []);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to load resources';
+      toast({ title: 'Error', description: message, variant: 'destructive' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUpload = async () => {
+    if (!user || !selectedProgram || !title.trim()) {
+      return;
     }
 
-    const { error } = await supabase.from('training_resources').insert({
-      program_id: selectedProgram,
-      title: title.trim(),
-      description: description.trim() || null,
-      file_url: fileUrl,
-      file_type: fileType,
-      external_url: externalUrl.trim() || null,
-      uploaded_by: user.id,
-    });
+    setUploading(true);
 
-    if (error) {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
-    } else {
+    try {
+      if (isXamppMode) {
+        const formData = new FormData();
+        formData.append('program_id', selectedProgram);
+        formData.append('title', title.trim());
+
+        if (description.trim()) {
+          formData.append('description', description.trim());
+        }
+
+        if (externalUrl.trim()) {
+          formData.append('external_url', externalUrl.trim());
+        }
+
+        if (file) {
+          formData.append('file', file);
+        }
+
+        await xamppApiRequest<{ id: string }>('/resources', {
+          method: 'POST',
+          body: formData,
+        });
+      } else {
+        let fileUrl: string | null = null;
+        let fileType: string | null = null;
+
+        if (file) {
+          const ext = file.name.split('.').pop();
+          const filePath = `${selectedProgram}/${Date.now()}-${file.name}`;
+          const { error: uploadError } = await supabase.storage
+            .from('training-materials')
+            .upload(filePath, file);
+
+          if (uploadError) {
+            throw uploadError;
+          }
+
+          const { data: urlData } = supabase.storage.from('training-materials').getPublicUrl(filePath);
+          fileUrl = urlData.publicUrl;
+          fileType = ext || null;
+        }
+
+        const { error } = await supabase.from('training_resources').insert({
+          program_id: selectedProgram,
+          title: title.trim(),
+          description: description.trim() || null,
+          file_url: fileUrl,
+          file_type: fileType,
+          external_url: externalUrl.trim() || null,
+          uploaded_by: user.id,
+        });
+
+        if (error) {
+          throw error;
+        }
+      }
+
       toast({ title: 'Resource added' });
       resetForm();
       setDialogOpen(false);
-      fetchData();
+      await fetchData();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to add resource';
+      toast({ title: 'Error', description: message, variant: 'destructive' });
+    } finally {
+      setUploading(false);
     }
-    setUploading(false);
   };
 
   const handleDelete = async (id: string) => {
-    const { error } = await supabase.from('training_resources').delete().eq('id', id);
-    if (error) {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
-    } else {
-      setResources((prev) => prev.filter((r) => r.id !== id));
+    try {
+      if (isXamppMode) {
+        await xamppApiRequest<{ message: string }>(`/resources/${id}`, {
+          method: 'DELETE',
+        });
+      } else {
+        const { error } = await supabase.from('training_resources').delete().eq('id', id);
+        if (error) {
+          throw error;
+        }
+      }
+
+      setResources((current) => current.filter((resource) => resource.id !== id));
       toast({ title: 'Resource deleted' });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to delete resource';
+      toast({ title: 'Error', description: message, variant: 'destructive' });
     }
   };
 
@@ -128,8 +198,12 @@ export default function Resources() {
     setSelectedProgram('');
   };
 
-  const filtered = filterProgram === 'all' ? resources : resources.filter((r) => r.program_id === filterProgram);
-  const getProgramTitle = (pid: string) => programs.find((p) => p.id === pid)?.title || 'Unknown';
+  const filtered = filterProgram === 'all'
+    ? resources
+    : resources.filter((resource) => resource.program_id === filterProgram);
+
+  const getProgramTitle = (programId: string) =>
+    programs.find((program) => program.id === programId)?.title || 'Unknown';
 
   if (loading) {
     return (
@@ -154,7 +228,7 @@ export default function Resources() {
           {canManage && (
             <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
               <DialogTrigger asChild>
-                <Button><Plus className="h-4 w-4 mr-2" />Add Resource</Button>
+                <Button><Plus className="mr-2 h-4 w-4" />Add Resource</Button>
               </DialogTrigger>
               <DialogContent>
                 <DialogHeader>
@@ -166,30 +240,34 @@ export default function Resources() {
                     <Select value={selectedProgram} onValueChange={setSelectedProgram}>
                       <SelectTrigger><SelectValue placeholder="Select program" /></SelectTrigger>
                       <SelectContent>
-                        {programs.map((p) => (
-                          <SelectItem key={p.id} value={p.id}>{p.title}</SelectItem>
+                        {programs.map((program) => (
+                          <SelectItem key={program.id} value={program.id}>{program.title}</SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
                   </div>
                   <div>
                     <Label>Title</Label>
-                    <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Resource title" />
+                    <Input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Resource title" />
                   </div>
                   <div>
                     <Label>Description (optional)</Label>
-                    <Textarea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Brief description" />
+                    <Textarea
+                      value={description}
+                      onChange={(event) => setDescription(event.target.value)}
+                      placeholder="Brief description"
+                    />
                   </div>
                   <div>
                     <Label>Upload File (optional)</Label>
-                    <Input type="file" onChange={(e) => setFile(e.target.files?.[0] || null)} />
+                    <Input type="file" onChange={(event) => setFile(event.target.files?.[0] || null)} />
                   </div>
                   <div>
                     <Label>External URL (optional)</Label>
-                    <Input value={externalUrl} onChange={(e) => setExternalUrl(e.target.value)} placeholder="https://..." />
+                    <Input value={externalUrl} onChange={(event) => setExternalUrl(event.target.value)} placeholder="https://..." />
                   </div>
-                  <Button onClick={handleUpload} disabled={uploading || !selectedProgram || !title.trim()} className="w-full">
-                    {uploading ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Upload className="h-4 w-4 mr-2" />}
+                  <Button onClick={() => void handleUpload()} disabled={uploading || !selectedProgram || !title.trim()} className="w-full">
+                    {uploading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
                     {uploading ? 'Uploading...' : 'Add Resource'}
                   </Button>
                 </div>
@@ -204,8 +282,8 @@ export default function Resources() {
             <SelectTrigger className="w-[240px]"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Programs</SelectItem>
-              {programs.map((p) => (
-                <SelectItem key={p.id} value={p.id}>{p.title}</SelectItem>
+              {programs.map((program) => (
+                <SelectItem key={program.id} value={program.id}>{program.title}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -219,40 +297,40 @@ export default function Resources() {
           </Card>
         ) : (
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {filtered.map((r) => (
-              <Card key={r.id}>
+            {filtered.map((resource) => (
+              <Card key={resource.id}>
                 <CardHeader className="pb-3">
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-2">
-                      {r.file_url ? <FileText className="h-5 w-5 text-primary" /> : <LinkIcon className="h-5 w-5 text-accent" />}
-                      <CardTitle className="text-base">{r.title}</CardTitle>
+                      {resource.file_url ? <FileText className="h-5 w-5 text-primary" /> : <LinkIcon className="h-5 w-5 text-accent" />}
+                      <CardTitle className="text-base">{resource.title}</CardTitle>
                     </div>
                     {canManage && (
-                      <Button variant="ghost" size="icon" onClick={() => handleDelete(r.id)}>
+                      <Button variant="ghost" size="icon" onClick={() => void handleDelete(resource.id)}>
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>
                     )}
                   </div>
-                  <CardDescription>{getProgramTitle(r.program_id)}</CardDescription>
+                  <CardDescription>{getProgramTitle(resource.program_id)}</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  {r.description && <p className="text-sm text-muted-foreground">{r.description}</p>}
+                  {resource.description && <p className="text-sm text-muted-foreground">{resource.description}</p>}
                   <div className="flex gap-2">
-                    {r.file_url && (
+                    {resource.file_url && (
                       <Button variant="outline" size="sm" asChild>
-                        <a href={r.file_url} target="_blank" rel="noopener noreferrer">
-                          <Download className="h-3 w-3 mr-1" />Download
+                        <a href={resource.file_url} target="_blank" rel="noopener noreferrer">
+                          <Download className="mr-1 h-3 w-3" />Download
                         </a>
                       </Button>
                     )}
-                    {r.external_url && (
+                    {resource.external_url && (
                       <Button variant="outline" size="sm" asChild>
-                        <a href={r.external_url} target="_blank" rel="noopener noreferrer">
-                          <LinkIcon className="h-3 w-3 mr-1" />Open Link
+                        <a href={resource.external_url} target="_blank" rel="noopener noreferrer">
+                          <LinkIcon className="mr-1 h-3 w-3" />Open Link
                         </a>
                       </Button>
                     )}
-                    {r.file_type && <Badge variant="secondary">{r.file_type.toUpperCase()}</Badge>}
+                    {resource.file_type && <Badge variant="secondary">{resource.file_type.toUpperCase()}</Badge>}
                   </div>
                 </CardContent>
               </Card>

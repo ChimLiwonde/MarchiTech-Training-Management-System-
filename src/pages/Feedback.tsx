@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
+import { isXamppMode } from '@/lib/appConfig';
+import { xamppApiRequest } from '@/lib/xamppApi';
 import DashboardLayout from '@/components/DashboardLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -50,6 +52,16 @@ interface ProgramReviewRow {
   rating: number;
   comment: string | null;
   created_at: string;
+}
+
+interface FeedbackProgramResponse {
+  id: string;
+  title: string;
+  description: string | null;
+  status: string;
+  my_review: ProgramWithReview['myReview'];
+  avg_rating: number | null;
+  review_count: number;
 }
 
 function StarRating({ rating, onRate, interactive = false, size = 'md' }: {
@@ -104,6 +116,20 @@ export default function Feedback() {
     setLoading(true);
 
     try {
+      if (isXamppMode) {
+        const response = await xamppApiRequest<{ data: FeedbackProgramResponse[] }>('/feedback');
+        setPrograms((response.data || []).map((program) => ({
+          id: program.id,
+          title: program.title,
+          description: program.description,
+          status: program.status,
+          myReview: program.my_review,
+          avgRating: program.avg_rating,
+          reviewCount: program.review_count,
+        })));
+        return;
+      }
+
       // Fetch programs the trainee is enrolled in (approved)
       let programsData: ProgramRow[] = [];
 
@@ -189,21 +215,35 @@ export default function Feedback() {
     setSubmitting(true);
     try {
       const program = programs.find(p => p.id === editingProgram);
-      if (program?.myReview) {
-        // Update
-        const { error } = await supabase
-          .from('program_reviews')
-          .update({ rating, comment: comment.trim() || null })
-          .eq('id', program.myReview.id);
-        if (error) throw error;
-        toast({ title: 'Review Updated', description: 'Your feedback has been updated.' });
+      if (isXamppMode) {
+        if (program?.myReview) {
+          await xamppApiRequest<{ message: string }>(`/feedback/${program.myReview.id}`, {
+            method: 'PATCH',
+            body: { rating, comment: comment.trim() || null },
+          });
+          toast({ title: 'Review Updated', description: 'Your feedback has been updated.' });
+        } else {
+          await xamppApiRequest<{ message: string }>('/feedback', {
+            method: 'POST',
+            body: { program_id: editingProgram, rating, comment: comment.trim() || null },
+          });
+          toast({ title: 'Review Submitted', description: 'Thank you for your feedback!' });
+        }
       } else {
-        // Insert
-        const { error } = await supabase
-          .from('program_reviews')
-          .insert({ program_id: editingProgram, trainee_id: user.id, rating, comment: comment.trim() || null });
-        if (error) throw error;
-        toast({ title: 'Review Submitted', description: 'Thank you for your feedback!' });
+        if (program?.myReview) {
+          const { error } = await supabase
+            .from('program_reviews')
+            .update({ rating, comment: comment.trim() || null })
+            .eq('id', program.myReview.id);
+          if (error) throw error;
+          toast({ title: 'Review Updated', description: 'Your feedback has been updated.' });
+        } else {
+          const { error } = await supabase
+            .from('program_reviews')
+            .insert({ program_id: editingProgram, trainee_id: user.id, rating, comment: comment.trim() || null });
+          if (error) throw error;
+          toast({ title: 'Review Submitted', description: 'Thank you for your feedback!' });
+        }
       }
       setDialogOpen(false);
       fetchData();
@@ -217,8 +257,14 @@ export default function Feedback() {
 
   const handleDelete = async (reviewId: string) => {
     try {
-      const { error } = await supabase.from('program_reviews').delete().eq('id', reviewId);
-      if (error) throw error;
+      if (isXamppMode) {
+        await xamppApiRequest<{ message: string }>(`/feedback/${reviewId}`, {
+          method: 'DELETE',
+        });
+      } else {
+        const { error } = await supabase.from('program_reviews').delete().eq('id', reviewId);
+        if (error) throw error;
+      }
       toast({ title: 'Review Deleted', description: 'Your review has been removed.' });
       fetchData();
     } catch {

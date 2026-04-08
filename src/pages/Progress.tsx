@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
+import { isXamppMode } from '@/lib/appConfig';
+import { xamppApiRequest } from '@/lib/xamppApi';
 import DashboardLayout from '@/components/DashboardLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
@@ -54,6 +56,11 @@ interface OverallStats {
   averageProgress: number;
 }
 
+interface ProgressOverviewResponse {
+  programs: ProgramProgressData[];
+  overall: OverallStats;
+}
+
 function ProgressContent() {
   const { user, role } = useAuth();
   const [programs, setPrograms] = useState<ProgramProgressData[]>([]);
@@ -69,6 +76,25 @@ function ProgressContent() {
   const fetchProgress = async () => {
     if (!user) return;
     try {
+      if (isXamppMode) {
+        const response = await xamppApiRequest<ProgressOverviewResponse>('/progress');
+        const progressData = response.programs || [];
+
+        setPrograms(progressData);
+        if (progressData.length > 0 && !selectedProgram) {
+          setSelectedProgram(progressData[0].programId);
+        }
+        setOverall(response.overall || {
+          totalPrograms: 0,
+          completedPrograms: 0,
+          totalSessionsAttended: 0,
+          totalAssessmentsPassed: 0,
+          totalCertificates: 0,
+          averageProgress: 0,
+        });
+        return;
+      }
+
       // Get enrolled programs
       const { data: enrollments } = await supabase
         .from('enrollments')

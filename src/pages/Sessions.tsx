@@ -1,8 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
+import { isXamppMode } from '@/lib/appConfig';
+import { xamppApiRequest } from '@/lib/xamppApi';
 import DashboardLayout from '@/components/DashboardLayout';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -11,7 +13,7 @@ import { Badge } from '@/components/ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { toast } from '@/hooks/use-toast';
-import { Calendar, Clock, MapPin, Plus, Loader2, BookOpen, Trash2, Download } from 'lucide-react';
+import { Calendar, Clock, MapPin, Plus, Loader2, Trash2, Download } from 'lucide-react';
 import { generateICS, downloadICS } from '@/lib/icsExport';
 
 interface Session {
@@ -31,15 +33,22 @@ interface Program {
   title: string;
 }
 
+interface SessionsResponse {
+  data: Session[];
+}
+
+interface ProgramsResponse {
+  data: Program[];
+}
+
 function SessionsContent() {
-  const { user, role } = useAuth();
+  const { role } = useAuth();
   const [sessions, setSessions] = useState<Session[]>([]);
   const [programs, setPrograms] = useState<Program[]>([]);
   const [loading, setLoading] = useState(true);
   const [createOpen, setCreateOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
-  // Form state
   const [programId, setProgramId] = useState('');
   const [sessionDate, setSessionDate] = useState('');
   const [startTime, setStartTime] = useState('');
@@ -48,48 +57,72 @@ function SessionsContent() {
   const [notes, setNotes] = useState('');
 
   useEffect(() => {
-    fetchSessions();
+    void fetchSessions();
     if (role === 'admin' || role === 'trainer') {
-      fetchPrograms();
+      void fetchPrograms();
     }
   }, [role]);
 
   const fetchSessions = async () => {
     setLoading(true);
-    const { data, error } = await supabase
-      .from('sessions')
-      .select('*')
-      .order('session_date', { ascending: true });
 
-    if (error) {
-      toast({ title: 'Error fetching sessions', description: error.message, variant: 'destructive' });
-      setLoading(false);
-      return;
-    }
-
-    // Enrich with program titles
-    const programIds = [...new Set((data || []).map(s => s.program_id))];
-    let titleMap: Record<string, string> = {};
-    if (programIds.length > 0) {
-      const { data: progs } = await supabase
-        .from('training_programs')
-        .select('id, title')
-        .in('id', programIds);
-      if (progs) {
-        titleMap = Object.fromEntries(progs.map(p => [p.id, p.title]));
+    try {
+      if (isXamppMode) {
+        const response = await xamppApiRequest<SessionsResponse>('/sessions');
+        setSessions(response.data ?? []);
+        return;
       }
-    }
 
-    setSessions((data || []).map(s => ({ ...s, program_title: titleMap[s.program_id] || 'Unknown' })));
-    setLoading(false);
+      const { data, error } = await supabase
+        .from('sessions')
+        .select('*')
+        .order('session_date', { ascending: true });
+
+      if (error) {
+        throw error;
+      }
+
+      const programIds = [...new Set((data || []).map((session) => session.program_id))];
+      let titleMap: Record<string, string> = {};
+      if (programIds.length > 0) {
+        const { data: progs } = await supabase
+          .from('training_programs')
+          .select('id, title')
+          .in('id', programIds);
+        if (progs) {
+          titleMap = Object.fromEntries(progs.map((program) => [program.id, program.title]));
+        }
+      }
+
+      setSessions((data || []).map((session) => ({
+        ...session,
+        program_title: titleMap[session.program_id] || 'Unknown',
+      })));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to fetch sessions';
+      toast({ title: 'Error fetching sessions', description: message, variant: 'destructive' });
+    } finally {
+      setLoading(false);
+    }
   };
 
   const fetchPrograms = async () => {
-    const { data } = await supabase
-      .from('training_programs')
-      .select('id, title')
-      .order('title');
-    setPrograms(data || []);
+    try {
+      if (isXamppMode) {
+        const response = await xamppApiRequest<ProgramsResponse>('/training-programs');
+        setPrograms(response.data ?? []);
+        return;
+      }
+
+      const { data } = await supabase
+        .from('training_programs')
+        .select('id, title')
+        .order('title');
+      setPrograms(data || []);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to fetch training programs';
+      toast({ title: 'Error fetching programs', description: message, variant: 'destructive' });
+    }
   };
 
   const handleCreate = async () => {
@@ -97,25 +130,46 @@ function SessionsContent() {
       toast({ title: 'Program and date are required', variant: 'destructive' });
       return;
     }
-    setSubmitting(true);
-    const { error } = await supabase.from('sessions').insert({
-      program_id: programId,
-      session_date: sessionDate,
-      start_time: startTime || null,
-      end_time: endTime || null,
-      location: location.trim() || null,
-      notes: notes.trim() || null,
-    });
 
-    if (error) {
-      toast({ title: 'Error creating session', description: error.message, variant: 'destructive' });
-    } else {
+    setSubmitting(true);
+    try {
+      if (isXamppMode) {
+        await xamppApiRequest<{ id: string }>('/sessions', {
+          method: 'POST',
+          body: {
+            program_id: programId,
+            session_date: sessionDate,
+            start_time: startTime || null,
+            end_time: endTime || null,
+            location: location.trim() || null,
+            notes: notes.trim() || null,
+          },
+        });
+      } else {
+        const { error } = await supabase.from('sessions').insert({
+          program_id: programId,
+          session_date: sessionDate,
+          start_time: startTime || null,
+          end_time: endTime || null,
+          location: location.trim() || null,
+          notes: notes.trim() || null,
+        });
+
+        if (error) {
+          throw error;
+        }
+      }
+
       toast({ title: 'Session created' });
       setCreateOpen(false);
       resetForm();
-      fetchSessions();
+      await fetchSessions();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to create session';
+      toast({ title: 'Error creating session', description: message, variant: 'destructive' });
+    } finally {
+      setSubmitting(false);
     }
-    setSubmitting(false);
   };
 
   const resetForm = () => {
@@ -128,12 +182,23 @@ function SessionsContent() {
   };
 
   const handleDelete = async (id: string) => {
-    const { error } = await supabase.from('sessions').delete().eq('id', id);
-    if (error) {
-      toast({ title: 'Error deleting session', description: error.message, variant: 'destructive' });
-    } else {
+    try {
+      if (isXamppMode) {
+        await xamppApiRequest<{ message: string }>(`/sessions/${id}`, {
+          method: 'DELETE',
+        });
+      } else {
+        const { error } = await supabase.from('sessions').delete().eq('id', id);
+        if (error) {
+          throw error;
+        }
+      }
+
       toast({ title: 'Session deleted' });
-      fetchSessions();
+      await fetchSessions();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to delete session';
+      toast({ title: 'Error deleting session', description: message, variant: 'destructive' });
     }
   };
 
@@ -152,7 +217,7 @@ function SessionsContent() {
         {canCreate && (
           <Dialog open={createOpen} onOpenChange={setCreateOpen}>
             <DialogTrigger asChild>
-              <Button><Plus className="h-4 w-4 mr-2" />New Session</Button>
+              <Button><Plus className="mr-2 h-4 w-4" />New Session</Button>
             </DialogTrigger>
             <DialogContent className="max-w-md">
               <DialogHeader>
@@ -165,36 +230,36 @@ function SessionsContent() {
                   <Select value={programId} onValueChange={setProgramId}>
                     <SelectTrigger><SelectValue placeholder="Select program" /></SelectTrigger>
                     <SelectContent>
-                      {programs.map(p => (
-                        <SelectItem key={p.id} value={p.id}>{p.title}</SelectItem>
+                      {programs.map((program) => (
+                        <SelectItem key={program.id} value={program.id}>{program.title}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
                 <div>
                   <Label>Date *</Label>
-                  <Input type="date" value={sessionDate} onChange={e => setSessionDate(e.target.value)} />
+                  <Input type="date" value={sessionDate} onChange={(event) => setSessionDate(event.target.value)} />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <Label>Start Time</Label>
-                    <Input type="time" value={startTime} onChange={e => setStartTime(e.target.value)} />
+                    <Input type="time" value={startTime} onChange={(event) => setStartTime(event.target.value)} />
                   </div>
                   <div>
                     <Label>End Time</Label>
-                    <Input type="time" value={endTime} onChange={e => setEndTime(e.target.value)} />
+                    <Input type="time" value={endTime} onChange={(event) => setEndTime(event.target.value)} />
                   </div>
                 </div>
                 <div>
                   <Label>Location</Label>
-                  <Input value={location} onChange={e => setLocation(e.target.value)} placeholder="Room, building, or online link" />
+                  <Input value={location} onChange={(event) => setLocation(event.target.value)} placeholder="Room, building, or online link" />
                 </div>
                 <div>
                   <Label>Notes</Label>
-                  <Textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Session details..." rows={2} />
+                  <Textarea value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Session details..." rows={2} />
                 </div>
                 <Button className="w-full" onClick={handleCreate} disabled={submitting}>
-                  {submitting && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                  {submitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   Create Session
                 </Button>
               </div>
@@ -209,14 +274,14 @@ function SessionsContent() {
         </div>
       ) : sessions.length === 0 ? (
         <Card>
-          <CardContent className="text-center py-12">
-            <Calendar className="h-12 w-12 mx-auto mb-4 text-muted-foreground opacity-50" />
+          <CardContent className="py-12 text-center">
+            <Calendar className="mx-auto mb-4 h-12 w-12 text-muted-foreground opacity-50" />
             <p className="text-muted-foreground">No sessions scheduled.</p>
           </CardContent>
         </Card>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {sessions.map(session => (
+          {sessions.map((session) => (
             <Card key={session.id} className={isPast(session.session_date) ? 'opacity-60' : ''}>
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
@@ -235,9 +300,9 @@ function SessionsContent() {
                   <div className="flex items-center gap-2">
                     <Clock className="h-4 w-4" />
                     <span>
-                      {session.start_time?.slice(0, 5) || '—'}
-                      {' – '}
-                      {session.end_time?.slice(0, 5) || '—'}
+                      {session.start_time?.slice(0, 5) || '-'}
+                      {' - '}
+                      {session.end_time?.slice(0, 5) || '-'}
                     </span>
                   </div>
                 )}
@@ -248,9 +313,9 @@ function SessionsContent() {
                   </div>
                 )}
                 {session.notes && (
-                  <p className="text-xs mt-2 border-t pt-2">{session.notes}</p>
+                  <p className="mt-2 border-t pt-2 text-xs">{session.notes}</p>
                 )}
-                <div className="pt-2 flex items-center gap-2">
+                <div className="flex items-center gap-2 pt-2">
                   <Button
                     size="sm"
                     variant="outline"
@@ -267,11 +332,11 @@ function SessionsContent() {
                       toast({ title: 'Calendar file downloaded' });
                     }}
                   >
-                    <Download className="h-4 w-4 mr-1" />Add to Calendar
+                    <Download className="mr-1 h-4 w-4" />Add to Calendar
                   </Button>
                   {canCreate && (
-                    <Button size="sm" variant="ghost" className="text-destructive" onClick={() => handleDelete(session.id)}>
-                      <Trash2 className="h-4 w-4 mr-1" />Delete
+                    <Button size="sm" variant="ghost" className="text-destructive" onClick={() => void handleDelete(session.id)}>
+                      <Trash2 className="mr-1 h-4 w-4" />Delete
                     </Button>
                   )}
                 </div>

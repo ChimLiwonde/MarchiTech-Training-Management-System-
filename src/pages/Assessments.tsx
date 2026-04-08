@@ -1,6 +1,8 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { isXamppMode } from '@/lib/appConfig';
+import { xamppApiRequest } from '@/lib/xamppApi';
 import DashboardLayout from '@/components/DashboardLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -8,12 +10,11 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { useToast } from '@/hooks/use-toast';
-import { Loader2, Plus, ClipboardCheck, Eye, Trash2, CheckCircle2, XCircle, Play } from 'lucide-react';
+import { CheckCircle2, ClipboardCheck, Eye, Loader2, Play, Plus, Trash2, XCircle } from 'lucide-react';
 
 interface Assessment {
   id: string;
@@ -31,7 +32,7 @@ interface Question {
   assessment_id: string;
   question_text: string;
   options: string[];
-  correct_answer: string;
+  correct_answer?: string;
   points: number;
   sort_order: number;
 }
@@ -44,7 +45,25 @@ interface Attempt {
   completed_at: string | null;
 }
 
-interface Program { id: string; title: string; }
+interface Program {
+  id: string;
+  title: string;
+}
+
+interface AssessmentsResponse {
+  data: Assessment[];
+  programs: Program[];
+  attempts: Attempt[];
+}
+
+interface QuestionsResponse {
+  data: Question[];
+}
+
+interface SubmitAttemptResponse {
+  score: number;
+  passed: boolean;
+}
 
 type View = 'list' | 'create' | 'questions' | 'take' | 'results';
 
@@ -59,141 +78,339 @@ export default function Assessments() {
   const [programs, setPrograms] = useState<Program[]>([]);
   const [attempts, setAttempts] = useState<Attempt[]>([]);
 
-  // Create assessment form
   const [selectedProgram, setSelectedProgram] = useState('');
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [passingScore, setPassingScore] = useState('70');
 
-  // Question management
   const [activeAssessment, setActiveAssessment] = useState<Assessment | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [newQuestion, setNewQuestion] = useState('');
   const [newOptions, setNewOptions] = useState(['', '', '', '']);
   const [newCorrect, setNewCorrect] = useState('');
 
-  // Quiz taking
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
-  const [lastResult, setLastResult] = useState<{ score: number; total: number; passed: boolean } | null>(null);
+  const [lastResult, setLastResult] = useState<{ score: number; passed: boolean } | null>(null);
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => {
+    if (!role) {
+      return;
+    }
+
+    void fetchData();
+  }, [role, user?.id]);
 
   const fetchData = async () => {
     setLoading(true);
-    const [pRes, aRes, attRes] = await Promise.all([
-      supabase.from('training_programs').select('id, title').order('title'),
-      supabase.from('assessments').select('*').order('created_at', { ascending: false }),
-      user ? supabase.from('assessment_attempts').select('*').eq('trainee_id', user.id) : Promise.resolve({ data: [] }),
-    ]);
-    if (pRes.data) setPrograms(pRes.data);
-    if (aRes.data) setAssessments(aRes.data as Assessment[]);
-    if (attRes.data) setAttempts(attRes.data as Attempt[]);
-    setLoading(false);
-  };
 
-  const createAssessment = async () => {
-    if (!user || !selectedProgram || !title.trim()) return;
-    const { error } = await supabase.from('assessments').insert({
-      program_id: selectedProgram,
-      title: title.trim(),
-      description: description.trim() || null,
-      passing_score: parseInt(passingScore) || 70,
-      created_by: user.id,
-    });
-    if (error) {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
-    } else {
-      toast({ title: 'Assessment created' });
-      setTitle(''); setDescription(''); setSelectedProgram(''); setPassingScore('70');
-      setView('list');
-      fetchData();
+    try {
+      if (isXamppMode) {
+        const response = await xamppApiRequest<AssessmentsResponse>('/assessments');
+        setPrograms(response.programs ?? []);
+        setAssessments(response.data ?? []);
+        setAttempts(response.attempts ?? []);
+        return;
+      }
+
+      const [programsRes, assessmentsRes, attemptsRes] = await Promise.all([
+        supabase.from('training_programs').select('id, title').order('title'),
+        supabase.from('assessments').select('*').order('created_at', { ascending: false }),
+        user ? supabase.from('assessment_attempts').select('*').eq('trainee_id', user.id) : Promise.resolve({ data: [], error: null }),
+      ]);
+
+      if (programsRes.error) {
+        throw programsRes.error;
+      }
+
+      if (assessmentsRes.error) {
+        throw assessmentsRes.error;
+      }
+
+      if (attemptsRes.error) {
+        throw attemptsRes.error;
+      }
+
+      setPrograms(programsRes.data ?? []);
+      setAssessments((assessmentsRes.data as Assessment[]) ?? []);
+      setAttempts((attemptsRes.data as Attempt[]) ?? []);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to load assessments';
+      toast({ title: 'Error', description: message, variant: 'destructive' });
+    } finally {
+      setLoading(false);
     }
   };
 
-  const togglePublish = async (a: Assessment) => {
-    const { error } = await supabase.from('assessments').update({ is_published: !a.is_published }).eq('id', a.id);
-    if (!error) fetchData();
+  const createAssessment = async () => {
+    if (!user || !selectedProgram || !title.trim()) {
+      return;
+    }
+
+    try {
+      if (isXamppMode) {
+        await xamppApiRequest<{ id: string }>('/assessments', {
+          method: 'POST',
+          body: {
+            program_id: selectedProgram,
+            title: title.trim(),
+            description: description.trim() || null,
+            passing_score: parseInt(passingScore, 10) || 70,
+          },
+        });
+      } else {
+        const { error } = await supabase.from('assessments').insert({
+          program_id: selectedProgram,
+          title: title.trim(),
+          description: description.trim() || null,
+          passing_score: parseInt(passingScore, 10) || 70,
+          created_by: user.id,
+        });
+
+        if (error) {
+          throw error;
+        }
+      }
+
+      toast({ title: 'Assessment created' });
+      setTitle('');
+      setDescription('');
+      setSelectedProgram('');
+      setPassingScore('70');
+      setView('list');
+      await fetchData();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to create assessment';
+      toast({ title: 'Error', description: message, variant: 'destructive' });
+    }
   };
 
-  const deleteAssessment = async (id: string) => {
-    const { error } = await supabase.from('assessments').delete().eq('id', id);
-    if (!error) fetchData();
+  const togglePublish = async (assessment: Assessment) => {
+    try {
+      if (isXamppMode) {
+        await xamppApiRequest<{ is_published: boolean }>(`/assessments/${assessment.id}/publish`, {
+          method: 'PATCH',
+          body: {
+            is_published: !assessment.is_published,
+          },
+        });
+      } else {
+        const { error } = await supabase
+          .from('assessments')
+          .update({ is_published: !assessment.is_published })
+          .eq('id', assessment.id);
+
+        if (error) {
+          throw error;
+        }
+      }
+
+      await fetchData();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to update publish status';
+      toast({ title: 'Error', description: message, variant: 'destructive' });
+    }
   };
 
-  const openQuestions = async (a: Assessment) => {
-    setActiveAssessment(a);
-    const { data } = await supabase.from('assessment_questions').select('*').eq('assessment_id', a.id).order('sort_order');
-    setQuestions((data as Question[]) || []);
-    setView('questions');
+  const deleteAssessment = async (assessmentId: string) => {
+    try {
+      if (isXamppMode) {
+        await xamppApiRequest<{ message: string }>(`/assessments/${assessmentId}`, {
+          method: 'DELETE',
+        });
+      } else {
+        const { error } = await supabase.from('assessments').delete().eq('id', assessmentId);
+        if (error) {
+          throw error;
+        }
+      }
+
+      await fetchData();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to delete assessment';
+      toast({ title: 'Error', description: message, variant: 'destructive' });
+    }
+  };
+
+  const loadQuestions = async (assessment: Assessment) => {
+    if (isXamppMode) {
+      const response = await xamppApiRequest<QuestionsResponse>(`/assessments/${assessment.id}/questions`);
+      setQuestions(response.data ?? []);
+      return;
+    }
+
+    const { data, error } = await supabase
+      .from('assessment_questions')
+      .select('*')
+      .eq('assessment_id', assessment.id)
+      .order('sort_order');
+
+    if (error) {
+      throw error;
+    }
+
+    setQuestions((data as Question[]) ?? []);
+  };
+
+  const openQuestions = async (assessment: Assessment) => {
+    setActiveAssessment(assessment);
+
+    try {
+      await loadQuestions(assessment);
+      setView('questions');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to load questions';
+      toast({ title: 'Error', description: message, variant: 'destructive' });
+    }
   };
 
   const addQuestion = async () => {
-    if (!activeAssessment || !newQuestion.trim() || !newCorrect) return;
-    const validOptions = newOptions.filter((o) => o.trim());
+    if (!activeAssessment || !newQuestion.trim() || !newCorrect) {
+      return;
+    }
+
+    const validOptions = newOptions.map((option) => option.trim()).filter(Boolean);
     if (validOptions.length < 2) {
       toast({ title: 'Add at least 2 options', variant: 'destructive' });
       return;
     }
-    const { error } = await supabase.from('assessment_questions').insert({
-      assessment_id: activeAssessment.id,
-      question_text: newQuestion.trim(),
-      options: validOptions,
-      correct_answer: newCorrect,
-      sort_order: questions.length,
-    });
-    if (error) {
-      toast({ title: 'Error', description: error.message, variant: 'destructive' });
-    } else {
-      setNewQuestion(''); setNewOptions(['', '', '', '']); setNewCorrect('');
-      openQuestions(activeAssessment);
+
+    try {
+      if (isXamppMode) {
+        await xamppApiRequest<{ id: string }>(`/assessments/${activeAssessment.id}/questions`, {
+          method: 'POST',
+          body: {
+            question_text: newQuestion.trim(),
+            options: validOptions,
+            correct_answer: newCorrect,
+            sort_order: questions.length,
+          },
+        });
+      } else {
+        const { error } = await supabase.from('assessment_questions').insert({
+          assessment_id: activeAssessment.id,
+          question_text: newQuestion.trim(),
+          options: validOptions,
+          correct_answer: newCorrect,
+          sort_order: questions.length,
+        });
+
+        if (error) {
+          throw error;
+        }
+      }
+
+      setNewQuestion('');
+      setNewOptions(['', '', '', '']);
+      setNewCorrect('');
+      await openQuestions(activeAssessment);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to add question';
+      toast({ title: 'Error', description: message, variant: 'destructive' });
     }
   };
 
-  const deleteQuestion = async (qId: string) => {
-    await supabase.from('assessment_questions').delete().eq('id', qId);
-    if (activeAssessment) openQuestions(activeAssessment);
+  const deleteQuestion = async (questionId: string) => {
+    if (!activeAssessment) {
+      return;
+    }
+
+    try {
+      if (isXamppMode) {
+        await xamppApiRequest<{ message: string }>(`/assessment-questions/${questionId}`, {
+          method: 'DELETE',
+        });
+      } else {
+        const { error } = await supabase.from('assessment_questions').delete().eq('id', questionId);
+        if (error) {
+          throw error;
+        }
+      }
+
+      await openQuestions(activeAssessment);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to delete question';
+      toast({ title: 'Error', description: message, variant: 'destructive' });
+    }
   };
 
-  const startQuiz = async (a: Assessment) => {
-    setActiveAssessment(a);
-    const { data } = await supabase.from('assessment_questions').select('*').eq('assessment_id', a.id).order('sort_order');
-    setQuestions((data as Question[]) || []);
-    setAnswers({});
-    setLastResult(null);
-    setView('take');
+  const startQuiz = async (assessment: Assessment) => {
+    setActiveAssessment(assessment);
+
+    try {
+      await loadQuestions(assessment);
+      setAnswers({});
+      setLastResult(null);
+      setView('take');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to load quiz';
+      toast({ title: 'Error', description: message, variant: 'destructive' });
+    }
   };
 
   const submitQuiz = async () => {
-    if (!activeAssessment || !user) return;
+    if (!activeAssessment || !user) {
+      return;
+    }
+
     setSubmitting(true);
-    let earned = 0;
-    let total = 0;
-    questions.forEach((q) => {
-      total += q.points;
-      if (answers[q.id] === q.correct_answer) earned += q.points;
-    });
-    const score = total > 0 ? Math.round((earned / total) * 100) : 0;
-    const passed = score >= activeAssessment.passing_score;
 
-    await supabase.from('assessment_attempts').insert({
-      assessment_id: activeAssessment.id,
-      trainee_id: user.id,
-      answers,
-      score,
-      passed,
-      completed_at: new Date().toISOString(),
-    });
+    try {
+      let score = 0;
+      let passed = false;
 
-    setLastResult({ score, total: 100, passed });
-    setView('results');
-    setSubmitting(false);
-    fetchData();
+      if (isXamppMode) {
+        const response = await xamppApiRequest<SubmitAttemptResponse>(`/assessments/${activeAssessment.id}/attempts`, {
+          method: 'POST',
+          body: {
+            answers,
+          },
+        });
+        score = response.score;
+        passed = response.passed;
+      } else {
+        let earned = 0;
+        let total = 0;
+        questions.forEach((question) => {
+          total += question.points;
+          if (answers[question.id] === question.correct_answer) {
+            earned += question.points;
+          }
+        });
+
+        score = total > 0 ? Math.round((earned / total) * 100) : 0;
+        passed = score >= activeAssessment.passing_score;
+
+        const { error } = await supabase.from('assessment_attempts').insert({
+          assessment_id: activeAssessment.id,
+          trainee_id: user.id,
+          answers,
+          score,
+          passed,
+          completed_at: new Date().toISOString(),
+        });
+
+        if (error) {
+          throw error;
+        }
+      }
+
+      setLastResult({ score, passed });
+      setView('results');
+      await fetchData();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to submit quiz';
+      toast({ title: 'Error', description: message, variant: 'destructive' });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const getProgramTitle = (pid: string) => programs.find((p) => p.id === pid)?.title || 'Unknown';
-  const getAttempt = (aId: string) => attempts.find((at) => at.assessment_id === aId && at.completed_at);
+  const getProgramTitle = (programId: string) =>
+    programs.find((program) => program.id === programId)?.title || 'Unknown';
+
+  const getAttempt = (assessmentId: string) =>
+    attempts.find((attempt) => attempt.assessment_id === assessmentId && attempt.completed_at);
 
   if (loading) {
     return (
@@ -219,31 +436,34 @@ export default function Assessments() {
               </div>
               {canManage && (
                 <Button onClick={() => setView('create')}>
-                  <Plus className="h-4 w-4 mr-2" />Create Assessment
+                  <Plus className="mr-2 h-4 w-4" />Create Assessment
                 </Button>
               )}
             </div>
 
             {assessments.length === 0 ? (
-              <Card><CardContent className="py-12 text-center text-muted-foreground">No assessments yet.</CardContent></Card>
+              <Card>
+                <CardContent className="py-12 text-center text-muted-foreground">No assessments yet.</CardContent>
+              </Card>
             ) : (
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {assessments.map((a) => {
-                  const attempt = getAttempt(a.id);
+                {assessments.map((assessment) => {
+                  const attempt = getAttempt(assessment.id);
+
                   return (
-                    <Card key={a.id}>
+                    <Card key={assessment.id}>
                       <CardHeader className="pb-3">
                         <div className="flex items-start justify-between">
-                          <CardTitle className="text-base">{a.title}</CardTitle>
-                          <Badge variant={a.is_published ? 'default' : 'secondary'}>
-                            {a.is_published ? 'Published' : 'Draft'}
+                          <CardTitle className="text-base">{assessment.title}</CardTitle>
+                          <Badge variant={assessment.is_published ? 'default' : 'secondary'}>
+                            {assessment.is_published ? 'Published' : 'Draft'}
                           </Badge>
                         </div>
-                        <CardDescription>{getProgramTitle(a.program_id)}</CardDescription>
+                        <CardDescription>{getProgramTitle(assessment.program_id)}</CardDescription>
                       </CardHeader>
                       <CardContent className="space-y-2">
-                        {a.description && <p className="text-sm text-muted-foreground">{a.description}</p>}
-                        <p className="text-xs text-muted-foreground">Passing score: {a.passing_score}%</p>
+                        {assessment.description && <p className="text-sm text-muted-foreground">{assessment.description}</p>}
+                        <p className="text-xs text-muted-foreground">Passing score: {assessment.passing_score}%</p>
                         {attempt && (
                           <div className="flex items-center gap-2">
                             {attempt.passed ? (
@@ -258,20 +478,20 @@ export default function Assessments() {
                       <CardFooter className="gap-2">
                         {canManage ? (
                           <>
-                            <Button variant="outline" size="sm" onClick={() => openQuestions(a)}>
-                              <Eye className="h-3 w-3 mr-1" />Questions
+                            <Button variant="outline" size="sm" onClick={() => void openQuestions(assessment)}>
+                              <Eye className="mr-1 h-3 w-3" />Questions
                             </Button>
-                            <Button variant="outline" size="sm" onClick={() => togglePublish(a)}>
-                              {a.is_published ? 'Unpublish' : 'Publish'}
+                            <Button variant="outline" size="sm" onClick={() => void togglePublish(assessment)}>
+                              {assessment.is_published ? 'Unpublish' : 'Publish'}
                             </Button>
-                            <Button variant="ghost" size="icon" onClick={() => deleteAssessment(a.id)}>
+                            <Button variant="ghost" size="icon" onClick={() => void deleteAssessment(assessment.id)}>
                               <Trash2 className="h-4 w-4 text-destructive" />
                             </Button>
                           </>
                         ) : (
-                          a.is_published && (
-                            <Button size="sm" onClick={() => startQuiz(a)}>
-                              <Play className="h-3 w-3 mr-1" />{attempt ? 'Retake' : 'Start'}
+                          assessment.is_published && (
+                            <Button size="sm" onClick={() => void startQuiz(assessment)}>
+                              <Play className="mr-1 h-3 w-3" />{attempt ? 'Retake' : 'Start'}
                             </Button>
                           )
                         )}
@@ -295,24 +515,32 @@ export default function Assessments() {
                 <Select value={selectedProgram} onValueChange={setSelectedProgram}>
                   <SelectTrigger><SelectValue placeholder="Select program" /></SelectTrigger>
                   <SelectContent>
-                    {programs.map((p) => <SelectItem key={p.id} value={p.id}>{p.title}</SelectItem>)}
+                    {programs.map((program) => (
+                      <SelectItem key={program.id} value={program.id}>{program.title}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
               <div>
                 <Label>Title</Label>
-                <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Assessment title" />
+                <Input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="Assessment title" />
               </div>
               <div>
                 <Label>Description</Label>
-                <Textarea value={description} onChange={(e) => setDescription(e.target.value)} />
+                <Textarea value={description} onChange={(event) => setDescription(event.target.value)} />
               </div>
               <div>
                 <Label>Passing Score (%)</Label>
-                <Input type="number" value={passingScore} onChange={(e) => setPassingScore(e.target.value)} min="0" max="100" />
+                <Input
+                  type="number"
+                  value={passingScore}
+                  onChange={(event) => setPassingScore(event.target.value)}
+                  min="0"
+                  max="100"
+                />
               </div>
               <div className="flex gap-2">
-                <Button onClick={createAssessment} disabled={!selectedProgram || !title.trim()}>Create</Button>
+                <Button onClick={() => void createAssessment()} disabled={!selectedProgram || !title.trim()}>Create</Button>
                 <Button variant="outline" onClick={() => setView('list')}>Cancel</Button>
               </div>
             </CardContent>
@@ -323,26 +551,28 @@ export default function Assessments() {
           <div className="space-y-6">
             <div className="flex items-center justify-between">
               <div>
-                <h2 className="text-xl font-bold text-foreground">{activeAssessment.title} — Questions</h2>
+                <h2 className="text-xl font-bold text-foreground">{activeAssessment.title} - Questions</h2>
                 <p className="text-muted-foreground">{questions.length} question(s)</p>
               </div>
               <Button variant="outline" onClick={() => setView('list')}>Back</Button>
             </div>
 
-            {questions.map((q, i) => (
-              <Card key={q.id}>
+            {questions.map((question, index) => (
+              <Card key={question.id}>
                 <CardHeader className="pb-2">
                   <div className="flex items-start justify-between">
-                    <CardTitle className="text-sm">Q{i + 1}: {q.question_text}</CardTitle>
-                    <Button variant="ghost" size="icon" onClick={() => deleteQuestion(q.id)}>
+                    <CardTitle className="text-sm">Q{index + 1}: {question.question_text}</CardTitle>
+                    <Button variant="ghost" size="icon" onClick={() => void deleteQuestion(question.id)}>
                       <Trash2 className="h-4 w-4 text-destructive" />
                     </Button>
                   </div>
                 </CardHeader>
                 <CardContent>
                   <div className="flex flex-wrap gap-2">
-                    {(q.options as string[]).map((opt, j) => (
-                      <Badge key={j} variant={opt === q.correct_answer ? 'default' : 'outline'}>{opt}</Badge>
+                    {question.options.map((option, optionIndex) => (
+                      <Badge key={optionIndex} variant={option === question.correct_answer ? 'default' : 'outline'}>
+                        {option}
+                      </Badge>
                     ))}
                   </div>
                 </CardContent>
@@ -350,22 +580,24 @@ export default function Assessments() {
             ))}
 
             <Card>
-              <CardHeader><CardTitle className="text-base">Add Question</CardTitle></CardHeader>
+              <CardHeader>
+                <CardTitle className="text-base">Add Question</CardTitle>
+              </CardHeader>
               <CardContent className="space-y-4">
                 <div>
                   <Label>Question</Label>
-                  <Textarea value={newQuestion} onChange={(e) => setNewQuestion(e.target.value)} placeholder="Enter question" />
+                  <Textarea value={newQuestion} onChange={(event) => setNewQuestion(event.target.value)} placeholder="Enter question" />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
-                  {newOptions.map((opt, i) => (
-                    <div key={i}>
-                      <Label>Option {i + 1}</Label>
+                  {newOptions.map((option, index) => (
+                    <div key={index}>
+                      <Label>Option {index + 1}</Label>
                       <Input
-                        value={opt}
-                        onChange={(e) => {
-                          const copy = [...newOptions];
-                          copy[i] = e.target.value;
-                          setNewOptions(copy);
+                        value={option}
+                        onChange={(event) => {
+                          const nextOptions = [...newOptions];
+                          nextOptions[index] = event.target.value;
+                          setNewOptions(nextOptions);
                         }}
                       />
                     </div>
@@ -376,13 +608,13 @@ export default function Assessments() {
                   <Select value={newCorrect} onValueChange={setNewCorrect}>
                     <SelectTrigger><SelectValue placeholder="Select correct option" /></SelectTrigger>
                     <SelectContent>
-                      {newOptions.filter((o) => o.trim()).map((o, i) => (
-                        <SelectItem key={i} value={o}>{o}</SelectItem>
+                      {newOptions.filter((option) => option.trim()).map((option, index) => (
+                        <SelectItem key={index} value={option}>{option}</SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
                 </div>
-                <Button onClick={addQuestion} disabled={!newQuestion.trim() || !newCorrect}>Add Question</Button>
+                <Button onClick={() => void addQuestion()} disabled={!newQuestion.trim() || !newCorrect}>Add Question</Button>
               </CardContent>
             </Card>
           </div>
@@ -394,17 +626,20 @@ export default function Assessments() {
               <h2 className="text-xl font-bold text-foreground">{activeAssessment.title}</h2>
               <p className="text-muted-foreground">Answer all questions, then submit.</p>
             </div>
-            {questions.map((q, i) => (
-              <Card key={q.id}>
+            {questions.map((question, index) => (
+              <Card key={question.id}>
                 <CardHeader className="pb-2">
-                  <CardTitle className="text-sm">Q{i + 1}: {q.question_text}</CardTitle>
+                  <CardTitle className="text-sm">Q{index + 1}: {question.question_text}</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <RadioGroup value={answers[q.id] || ''} onValueChange={(v) => setAnswers((prev) => ({ ...prev, [q.id]: v }))}>
-                    {(q.options as string[]).map((opt, j) => (
-                      <div key={j} className="flex items-center gap-2">
-                        <RadioGroupItem value={opt} id={`${q.id}-${j}`} />
-                        <Label htmlFor={`${q.id}-${j}`}>{opt}</Label>
+                  <RadioGroup
+                    value={answers[question.id] || ''}
+                    onValueChange={(value) => setAnswers((current) => ({ ...current, [question.id]: value }))}
+                  >
+                    {question.options.map((option, optionIndex) => (
+                      <div key={optionIndex} className="flex items-center gap-2">
+                        <RadioGroupItem value={option} id={`${question.id}-${optionIndex}`} />
+                        <Label htmlFor={`${question.id}-${optionIndex}`}>{option}</Label>
                       </div>
                     ))}
                   </RadioGroup>
@@ -412,8 +647,8 @@ export default function Assessments() {
               </Card>
             ))}
             <div className="flex gap-3">
-              <Button onClick={submitQuiz} disabled={submitting || Object.keys(answers).length < questions.length}>
-                {submitting ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <ClipboardCheck className="h-4 w-4 mr-2" />}
+              <Button onClick={() => void submitQuiz()} disabled={submitting || Object.keys(answers).length < questions.length}>
+                {submitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ClipboardCheck className="mr-2 h-4 w-4" />}
                 Submit
               </Button>
               <Button variant="outline" onClick={() => setView('list')}>Cancel</Button>
@@ -422,9 +657,9 @@ export default function Assessments() {
         )}
 
         {view === 'results' && lastResult && activeAssessment && (
-          <Card className="max-w-md mx-auto text-center">
+          <Card className="mx-auto max-w-md text-center">
             <CardHeader>
-              <CardTitle>{lastResult.passed ? '🎉 Passed!' : 'Not Passed'}</CardTitle>
+              <CardTitle>{lastResult.passed ? 'Passed' : 'Not Passed'}</CardTitle>
               <CardDescription>{activeAssessment.title}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -432,15 +667,15 @@ export default function Assessments() {
               <Progress value={lastResult.score} className="h-3" />
               <p className="text-sm text-muted-foreground">Passing score: {activeAssessment.passing_score}%</p>
               {lastResult.passed ? (
-                <CheckCircle2 className="h-12 w-12 text-[hsl(var(--success))] mx-auto" />
+                <CheckCircle2 className="mx-auto h-12 w-12 text-[hsl(var(--success))]" />
               ) : (
-                <XCircle className="h-12 w-12 text-destructive mx-auto" />
+                <XCircle className="mx-auto h-12 w-12 text-destructive" />
               )}
             </CardContent>
             <CardFooter className="justify-center gap-3">
               <Button onClick={() => setView('list')}>Back to Assessments</Button>
               {!lastResult.passed && (
-                <Button variant="outline" onClick={() => startQuiz(activeAssessment)}>Retake</Button>
+                <Button variant="outline" onClick={() => void startQuiz(activeAssessment)}>Retake</Button>
               )}
             </CardFooter>
           </Card>

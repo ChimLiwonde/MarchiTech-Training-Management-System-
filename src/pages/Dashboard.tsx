@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
+import { isXamppMode } from '@/lib/appConfig';
+import { xamppApiRequest } from '@/lib/xamppApi';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
 import { Badge } from '@/components/ui/badge';
@@ -36,7 +38,7 @@ import {
   Cell,
   Legend,
 } from 'recharts';
-import { format, parseISO, isAfter, isBefore, addDays } from 'date-fns';
+import { format, parseISO, addDays } from 'date-fns';
 import WelcomeTour from '@/components/WelcomeTour';
 
 interface AttendanceStat {
@@ -80,6 +82,48 @@ interface UpcomingSession {
   location: string | null;
 }
 
+interface QuickStatPayload {
+  label: string;
+  value: string | number;
+  path?: string;
+}
+
+interface ActivityPayload {
+  id: string;
+  type: ActivityItem['type'];
+  description: string;
+  timestamp: string;
+}
+
+interface DashboardOverviewResponse {
+  quick_stats: QuickStatPayload[];
+  attendance_stats: AttendanceStat[];
+  activities: ActivityPayload[];
+  upcoming_sessions: UpcomingSession[];
+  enrollment_chart: { name: string; count: number }[];
+  pass_rate_chart: { name: string; value: number }[];
+  program_progress: ProgramProgress[];
+}
+
+const QUICK_STAT_ICON_MAP: Record<string, React.ElementType> = {
+  'Total Users': Users,
+  'Active Trainings': BookOpen,
+  'Sessions Today': Calendar,
+  'Certificates Issued': Award,
+  'My Trainings': BookOpen,
+  'Total Trainees': Users,
+  'Upcoming Sessions': Calendar,
+  'Enrolled Programs': BookOpen,
+  'Assessments Passed': GraduationCap,
+  'Certificates': Award,
+};
+
+const ACTIVITY_ICON_MAP: Record<ActivityItem['type'], React.ElementType> = {
+  enrollment: UserPlus,
+  certificate: Award,
+  assessment: FileCheck,
+};
+
 const CHART_COLORS = [
   'hsl(220, 73%, 23%)',   // primary
   'hsl(37, 92%, 50%)',    // accent
@@ -102,19 +146,46 @@ function DashboardContent() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (user && role) {
-      Promise.all([
-        fetchQuickStats(),
-        fetchAttendanceStats(),
-        fetchRecentActivity(),
-        fetchUpcomingSessions(),
-        fetchChartData(),
-        fetchProgramProgress(),
-      ]).finally(() => setLoading(false));
+    if (!user || !role) {
+      setLoading(false);
+      return;
     }
+
+    setLoading(true);
+
+    const loader = isXamppMode
+      ? loadXamppDashboard()
+      : Promise.all([
+          fetchQuickStats(),
+          fetchAttendanceStats(),
+          fetchRecentActivity(),
+          fetchUpcomingSessions(),
+          fetchChartData(),
+          fetchProgramProgress(),
+        ]).then(() => undefined);
+
+    loader.finally(() => setLoading(false));
     // We intentionally run dashboard data loaders on auth context changes only.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user, role]);
+
+  const loadXamppDashboard = async () => {
+    const response = await xamppApiRequest<DashboardOverviewResponse>('/dashboard');
+
+    setQuickStats((response.quick_stats || []).map((stat) => ({
+      ...stat,
+      icon: QUICK_STAT_ICON_MAP[stat.label] || BarChart3,
+    })));
+    setAttendanceStats(response.attendance_stats || []);
+    setActivities((response.activities || []).map((activity) => ({
+      ...activity,
+      icon: ACTIVITY_ICON_MAP[activity.type] || BarChart3,
+    })));
+    setUpcomingSessions(response.upcoming_sessions || []);
+    setEnrollmentChart(response.enrollment_chart || []);
+    setPassRateChart(response.pass_rate_chart || []);
+    setProgramProgress(response.program_progress || []);
+  };
 
   const fetchQuickStats = async () => {
     const stats: QuickStat[] = [];
@@ -493,7 +564,7 @@ function DashboardContent() {
       {/* Welcome */}
       <div>
         <h2 className="text-2xl font-bold mb-1">
-          Welcome back{user?.user_metadata?.full_name ? `, ${user.user_metadata.full_name}` : ''}!
+          Welcome back{user?.user_metadata?.full_name || user?.full_name ? `, ${user?.user_metadata?.full_name || user?.full_name}` : ''}!
         </h2>
         <p className="text-muted-foreground">
           Here's an overview of your {role === 'admin' ? 'system' : role === 'trainer' ? 'trainings' : 'learning journey'}.
@@ -772,3 +843,7 @@ export default function Dashboard() {
     </DashboardLayout>
   );
 }
+
+
+
+

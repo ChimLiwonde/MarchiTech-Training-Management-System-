@@ -1,7 +1,9 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
-import { useAuth } from '@/hooks/useAuth';
+import { AppRole, useAuth } from '@/hooks/useAuth';
+import { isXamppMode } from '@/lib/appConfig';
+import { xamppApiRequest } from '@/lib/xamppApi';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -31,9 +33,6 @@ import {
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 import { Users, Search, Shield, Loader2 } from 'lucide-react';
-import type { Database } from '@/integrations/supabase/types';
-
-type AppRole = Database['public']['Enums']['app_role'];
 
 interface UserWithRole {
   id: string;
@@ -43,6 +42,16 @@ interface UserWithRole {
   phone: string | null;
   created_at: string;
   role: AppRole | null;
+}
+
+interface UserManagementResponse {
+  data: UserWithRole[];
+  summary: {
+    total: number;
+    admins: number;
+    trainers: number;
+    trainees: number;
+  };
 }
 
 export default function UserManagement() {
@@ -57,6 +66,11 @@ export default function UserManagement() {
   const { data: users = [], isLoading } = useQuery({
     queryKey: ['admin-users'],
     queryFn: async () => {
+      if (isXamppMode) {
+        const response = await xamppApiRequest<UserManagementResponse>('/users');
+        return response.data || [];
+      }
+
       // Fetch profiles
       const { data: profiles, error: profilesError } = await supabase
         .from('profiles')
@@ -84,6 +98,14 @@ export default function UserManagement() {
 
   const updateRoleMutation = useMutation({
     mutationFn: async ({ userId, role }: { userId: string; role: AppRole }) => {
+      if (isXamppMode) {
+        await xamppApiRequest<{ message: string; role: AppRole }>(`/users/${userId}/role`, {
+          method: 'PATCH',
+          body: { role },
+        });
+        return;
+      }
+
       const { error } = await supabase
         .from('user_roles')
         .update({ role })
